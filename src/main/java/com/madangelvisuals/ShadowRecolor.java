@@ -7,6 +7,7 @@ import net.runelite.api.Model;
 
 /**
  * Brightens an existing spotanim/GraphicsObject model in place (cosmetic recolor).
+ * Clears face textures and transparency so the tint is as visible as untextured VFX.
  */
 final class ShadowRecolor
 {
@@ -23,9 +24,8 @@ final class ShadowRecolor
 
 		short hsl = JagexColor.rgbToHSL(color.getRGB(), 1.0d);
 		int hue = JagexColor.unpackHue(hsl);
-		// Push sat/lum high so the shadow reads as an extremely bright tint.
-		int sat = Math.min(7, Math.max(JagexColor.unpackSaturation(hsl), 6));
-		int lum = Math.min(JagexColor.LUMINANCE_MAX, Math.max(JagexColor.unpackLuminance(hsl), 100));
+		int sat = JagexColor.SATURATION_MAX;
+		int lum = JagexColor.LUMINANCE_MAX;
 		short bright = JagexColor.packHSL(hue, sat, lum);
 		int brightInt = bright & 0xFFFF;
 
@@ -39,7 +39,20 @@ final class ShadowRecolor
 		fill(model.getFaceColors2(), brightInt);
 		fill(model.getFaceColors3(), brightInt);
 
-		// Invalidate GPU cache for this model once after mutation.
+		// Textured faces ignore face colors; strip textures so the tint shows.
+		short[] textures = model.getFaceTextures();
+		if (textures != null)
+		{
+			Arrays.fill(textures, (short) -1);
+		}
+
+		// Semi-transparent shadows stay faint even when recolored; force opaque faces.
+		byte[] transparencies = model.getFaceTransparencies();
+		if (transparencies != null)
+		{
+			Arrays.fill(transparencies, (byte) 0);
+		}
+
 		model.setSceneId(-1);
 	}
 

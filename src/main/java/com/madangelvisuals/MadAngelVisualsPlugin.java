@@ -43,8 +43,11 @@ import net.runelite.client.plugins.PluginDescriptor;
 )
 public class MadAngelVisualsPlugin extends Plugin
 {
-	/** Prefer Mad Angel bomb impact/telegraph spotanims when present on the destination tile. */
-	private static final int[] PREFERRED_SHADOW_SPOTANIMS = {
+	/**
+	 * Only these Mad Angel bomb spotanims are recolored — never arbitrary tile VFX
+	 * (e.g. sword-slash dust).
+	 */
+	private static final int[] SHADOW_SPOTANIMS = {
 		SpotanimID.VFX_MAD_ANGEL_ATTACK_BOMB_THROW_IMPACT_01,
 		SpotanimID.VFX_MAD_ANGEL_ATTACK_BOMB_THROW_IMPACT_02,
 		SpotanimID.VFX_MAD_ANGEL_ATTACK_BOMB_THROW,
@@ -60,9 +63,7 @@ public class MadAngelVisualsPlugin extends Plugin
 
 	private final Set<Projectile> seenBombProjectiles = new HashSet<>();
 	private final Set<NPC> madAngels = new HashSet<>();
-	/** Player-stand destinations awaiting / receiving shadow recolor. */
 	private final List<PendingDestination> pendingDestinations = new ArrayList<>();
-	/** GraphicsObjects we are actively recoloring until they finish. */
 	private final List<GraphicsObject> recoloredShadows = new ArrayList<>();
 
 	@Provides
@@ -154,7 +155,7 @@ public class MadAngelVisualsPlugin extends Plugin
 		}
 
 		pendingDestinations.add(new PendingDestination(projectile, target, lp));
-		tryRecolorAtDestination(target, lp);
+		tryRecolorAtDestination(lp);
 		log.debug("Pending shadow recolor at {}", target);
 	}
 
@@ -167,25 +168,25 @@ public class MadAngelVisualsPlugin extends Plugin
 		}
 
 		GraphicsObject go = event.getGraphicsObject();
+		if (!isShadowSpotanim(go.getId()))
+		{
+			return;
+		}
+
 		LocalPoint lp = go.getLocation();
 		if (lp == null)
 		{
 			return;
 		}
 
-		WorldPoint wp = WorldPoint.fromLocalInstance(client, lp);
-		if (wp == null)
-		{
-			wp = WorldPoint.fromLocal(client, lp);
-		}
-
 		for (PendingDestination pending : pendingDestinations)
 		{
-			if (sameTile(pending.target, wp) || sameSceneTile(pending.localPoint, lp))
+			if (sameSceneTile(pending.localPoint, lp))
 			{
 				if (trackAndRecolor(go))
 				{
-					log.debug("Recolored shadow gfx id={} at {}", go.getId(), wp);
+					log.debug("Recolored shadow gfx id={} at scene ({}, {})",
+						go.getId(), lp.getSceneX(), lp.getSceneY());
 				}
 				return;
 			}
@@ -210,7 +211,7 @@ public class MadAngelVisualsPlugin extends Plugin
 					continue;
 				}
 			}
-			tryRecolorAtDestination(pending.target, pending.localPoint);
+			tryRecolorAtDestination(pending.localPoint);
 		}
 
 		Iterator<GraphicsObject> shadowIt = recoloredShadows.iterator();
@@ -241,14 +242,11 @@ public class MadAngelVisualsPlugin extends Plugin
 		}
 	}
 
-	private void tryRecolorAtDestination(WorldPoint target, LocalPoint localPoint)
+	private void tryRecolorAtDestination(LocalPoint localPoint)
 	{
-		GraphicsObject preferred = null;
-		GraphicsObject fallback = null;
-
 		for (GraphicsObject go : client.getTopLevelWorldView().getGraphicsObjects())
 		{
-			if (go.finished())
+			if (go.finished() || !isShadowSpotanim(go.getId()))
 			{
 				continue;
 			}
@@ -257,27 +255,17 @@ public class MadAngelVisualsPlugin extends Plugin
 			{
 				continue;
 			}
-
-			if (isPreferredShadowSpotanim(go.getId()))
-			{
-				preferred = go;
-				break;
-			}
-			if (fallback == null)
-			{
-				fallback = go;
-			}
-		}
-
-		GraphicsObject chosen = preferred != null ? preferred : fallback;
-		if (chosen != null)
-		{
-			trackAndRecolor(chosen);
+			trackAndRecolor(go);
 		}
 	}
 
 	private boolean trackAndRecolor(GraphicsObject go)
 	{
+		if (!isShadowSpotanim(go.getId()))
+		{
+			return false;
+		}
+
 		if (recoloredShadows.contains(go))
 		{
 			ShadowRecolor.apply(go.getModel(), config.style().getShadowColor());
@@ -287,7 +275,6 @@ public class MadAngelVisualsPlugin extends Plugin
 		Model model = go.getModel();
 		if (model == null)
 		{
-			// Model may not be ready this frame; keep pending and retry on tick.
 			return false;
 		}
 
@@ -354,14 +341,6 @@ public class MadAngelVisualsPlugin extends Plugin
 		return lp;
 	}
 
-	private static boolean sameTile(WorldPoint a, WorldPoint b)
-	{
-		return a != null && b != null
-			&& a.getX() == b.getX()
-			&& a.getY() == b.getY()
-			&& a.getPlane() == b.getPlane();
-	}
-
 	private static boolean sameSceneTile(LocalPoint a, LocalPoint b)
 	{
 		if (a == null || b == null)
@@ -371,11 +350,11 @@ public class MadAngelVisualsPlugin extends Plugin
 		return a.getSceneX() == b.getSceneX() && a.getSceneY() == b.getSceneY();
 	}
 
-	private static boolean isPreferredShadowSpotanim(int id)
+	private static boolean isShadowSpotanim(int id)
 	{
-		for (int preferred : PREFERRED_SHADOW_SPOTANIMS)
+		for (int shadowId : SHADOW_SPOTANIMS)
 		{
-			if (preferred == id)
+			if (shadowId == id)
 			{
 				return true;
 			}
