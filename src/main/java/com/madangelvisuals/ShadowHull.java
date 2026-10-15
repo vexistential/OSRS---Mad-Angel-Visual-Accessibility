@@ -1,6 +1,7 @@
 package com.madangelvisuals;
 
 import java.awt.Shape;
+import java.util.Arrays;
 import javax.annotation.Nullable;
 import net.runelite.api.Client;
 import net.runelite.api.GraphicsObject;
@@ -11,11 +12,13 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.model.Jarvis;
 
 /**
- * Projects a GraphicsObject's model vertices to canvas and builds a convex hull
- * that follows the mesh silhouette (circular shadows stay round-ish).
+ * Floor-parallel outline of a shadow GraphicsObject.
  * <p>
- * Do not use {@link Perspective#getClickbox} here — it often returns an AABB,
- * which looks square on floor shadows.
+ * Collapses model vertices onto the model's lowest Y (ground contact) before
+ * projecting, so the convex hull lies on the floor plane instead of forming a
+ * vertical billboard circle from the full 3D silhouette.
+ * <p>
+ * Do not use {@link Perspective#getClickbox} — it often returns an AABB.
  */
 final class ShadowHull
 {
@@ -58,10 +61,23 @@ final class ShadowHull
 			return null;
 		}
 
+		// Flatten onto the floor contact plane (min model Y) so the hull is
+		// parallel to the ground, matching the looming shadow disc.
+		float floorY = vy[0];
+		for (int i = 1; i < vertexCount; i++)
+		{
+			if (vy[i] < floorY)
+			{
+				floorY = vy[i];
+			}
+		}
+		float[] flatY = new float[vertexCount];
+		Arrays.fill(flatY, floorY);
+
 		int z = graphicsObject.getZ() - graphicsObject.getAnimationHeightOffset();
 		int[] x2d = new int[vertexCount];
 		int[] y2d = new int[vertexCount];
-		Perspective.modelToCanvas(client, wv, vertexCount, lp.getX(), lp.getY(), z, 0, vx, vy, vz, x2d, y2d);
+		Perspective.modelToCanvas(client, wv, vertexCount, lp.getX(), lp.getY(), z, 0, vx, flatY, vz, x2d, y2d);
 		return Jarvis.convexHull(x2d, y2d);
 	}
 }

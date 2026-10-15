@@ -13,9 +13,9 @@
 
 ## MVP outline path (viable — refine, don’t replace)
 
-- Project shadow model vertices with `modelToCanvas`, then `Jarvis.convexHull`, stroke only (no fill).
-- Do **not** use `getClickbox` for the outline (AABB → square-ish).
-- Do **not** use full-tile `getCanvasTilePoly` or `ModelOutlineRenderer` for these flat floor shadows.
+- Flatten model vertices to min Y (floor contact), `modelToCanvas` + `Jarvis.convexHull`, stroke only (no fill) so the outline lies parallel to the floor.
+- Do **not** project the full 3D silhouette (reads as a vertical circle).
+- Do **not** use `getClickbox` (AABB → square-ish), full-tile polys, or `ModelOutlineRenderer`.
 
 ## Pinned shadow candidates
 

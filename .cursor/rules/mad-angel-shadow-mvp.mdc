@@ -13,11 +13,12 @@ The following approach is a **viable MVP**. Further work is refinement only; do 
 2. Skip bounce-back to Mad Angel (`targetActor` / footprint).
 3. Track destination `GraphicsObject`s (pinned bomb spotanims + early-window loom candidates).
 4. In-place `BeforeRender` face recolor (`ShadowRecolor`: untexture, opaque, max HSL).
-5. Outline the **shadow mesh** with canvas vertex projection + `Jarvis.convexHull` (`ShadowHull`), stroked with a bright border and **no fill** (`ShadowBorderOverlay`).
+5. Outline the **shadow mesh** with a **floor-parallel** hull (`ShadowHull`): flatten model vertices to min Y, `modelToCanvas` + `Jarvis.convexHull`, bright stroke **no fill** (`ShadowBorderOverlay`).
 
 ## Do not
 
 - Full-tile `Perspective.getCanvasTilePoly` as the primary highlight
 - `ModelOutlineRenderer` for these flat floor shadows (often invisible)
 - Prefer `Perspective.getClickbox` for the outline (AABB → square-ish)
+- Project the full 3D silhouette without flattening (reads as a vertical circle)
 - Assign `GraphicsObject.getModel()` to a `RuneLiteObject` (shared buffer → actor ghosts)
