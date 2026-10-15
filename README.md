@@ -1,28 +1,36 @@
 # Mad Angel Light Visuals
 
-Accessibility-focused **recolor** of the Mad Angel (Wyrmscraig) **Exploding Light** floor shadow.
+Makes the Mad Angel (Wyrmscraig) **Exploding Light** floor shadow easier to see.
 
-When the ball is aimed at a **player-stand destination**, the existing floor shadow spotanim is tinted a bright curated color in place each frame, with a vibrant outline of the shadow mesh itself. The ball projectile is unchanged. Bounce-back toward the boss is not recolored.
+When the attack targets a player-stand destination, this plugin recolors the
+existing floor shadow and draws a high-contrast outline around the shadow's
+footprint. The ball projectile is unchanged. Bounce-back toward the Mad Angel
+is not recolored.
 
 ## Features
 
-- High-contrast in-place recolor of the Exploding Light floor shadow
-- Vibrant convex-hull outline of the shadow mesh (not a full-tile highlight)
-- Skip bounce-back toward the Mad Angel
-- Vanilla ball projectile
-- Color enum (Magenta / Cyan / Orange / Lime)
-
-## Local development
-
-```powershell
-.\gradlew.bat run
-```
-
-Jagex accounts: follow [Using Jagex Accounts](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
+- High-contrast recolor of the Exploding Light floor shadow
+- Floor-parallel outline of the shadow footprint (not a full-tile highlight)
+- Skips bounce-back toward the Mad Angel
+- Does not alter the ball projectile
+- Color choices: Magenta, Cyan, Orange, Lime
 
 ## Configuration
 
 | Setting | Description |
 |---------|-------------|
-| Recolor floor shadow | Enable shadow tinting |
+| Recolor floor shadow | Enable shadow recolor and outline |
 | Shadow color | Magenta / Cyan / Orange / Lime |
+
+## Development
+
+```powershell
+.\gradlew.bat run
+```
+
+Jagex accounts: follow
+[Using Jagex Accounts](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
+
+## License
+
+BSD-2-Clause. See [LICENSE](LICENSE).

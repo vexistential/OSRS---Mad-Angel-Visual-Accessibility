@@ -11,10 +11,17 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum LightStyle
 {
-	MAGENTA(new Color(255, 0, 220)),
-	CYAN(new Color(0, 230, 255)),
-	ORANGE(new Color(255, 140, 0)),
-	LIME(new Color(120, 255, 0));
+	MAGENTA("Magenta", new Color(255, 0, 220)),
+	CYAN("Cyan", new Color(0, 230, 255)),
+	ORANGE("Orange", new Color(255, 140, 0)),
+	LIME("Lime", new Color(120, 255, 0));
 
+	private final String displayName;
 	private final Color shadowColor;
+
+	@Override
+	public String toString()
+	{
+		return displayName;
+	}
 }

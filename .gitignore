@@ -19,6 +19,7 @@ out/
 .classpath
 .settings/
 .vscode/
+.cursor/
 nbactions.xml
 nb-configuration.xml
 nbproject/
@@ -34,8 +35,12 @@ local.properties
 credentials.json
 .jagex_cache*
 
-# AI workflow / agent scaffolding (not plugin source)
+# Local workflow / agent scaffolding (not part of the plugin)
 runs/
-_workflow_log.md
-_classify_log.jsonl
-2026-*-*.md
+AGENTS.md
+CLAUDE.md
+docs/FALLBACK.md
+docs/VERIFY.md
+docs/VERIFY_MATRIX.md
+docs/ID_CAPTURE.md
+docs/HUB_SUBMIT.md
