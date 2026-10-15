@@ -17,4 +17,4 @@
 
 ## Capture (if shadow still dark)
 
-With `--debug` / developer mode, look for `Shadow capture gfx id=... onPendingDestination=true` during a stand-destination bomb. If the loom shadow uses an ID outside the table above, pin that ID into `SHADOW_SPOTANIMS` in `MadAngelVisualsPlugin`.
+Client logs (INFO) emit `Shadow capture gfx id=...` and `Attached high-contrast shadow clone for gfx id=...` during a stand-destination bomb. Early destination gfx (first ~1s after throw) are also attached so an unlisted loom ID can still remap. If dust is hit, note that ID and we can exclude it; if the loom ID is found, pin it into `SHADOW_SPOTANIMS`.

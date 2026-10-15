@@ -2,7 +2,9 @@ package com.madangelvisuals;
 
 import com.google.inject.Provides;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -47,14 +49,17 @@ import net.runelite.client.plugins.PluginDescriptor;
 public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 {
 	/**
-	 * Candidate loom / bomb ground spotanims. Capture logs may reveal additional
-	 * IDs to pin here — never fall back to arbitrary tile VFX.
+	 * Known Mad Angel bomb ground spotanims. Early destination gfx during a bomb
+	 * window may also be attached so an unlisted loom ID can still be remapped.
 	 */
 	private static final int[] SHADOW_SPOTANIMS = {
 		SpotanimID.VFX_MAD_ANGEL_ATTACK_BOMB_THROW,
 		SpotanimID.VFX_MAD_ANGEL_ATTACK_BOMB_THROW_IMPACT_01,
 		SpotanimID.VFX_MAD_ANGEL_ATTACK_BOMB_THROW_IMPACT_02,
 	};
+
+	/** Client cycles (~20ms) after bomb spawn during which destination gfx are treated as loom candidates. */
+	private static final int EARLY_LOOM_CYCLES = 50;
 
 	/** Keep scanning destination tiles briefly after the ball despawns. */
 	private static final int PENDING_EXTRA_TICKS = 8;
@@ -71,9 +76,10 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 	private final Set<Projectile> seenBombProjectiles = new HashSet<>();
 	private final Set<NPC> madAngels = new HashSet<>();
 	private final List<PendingDestination> pendingDestinations = new ArrayList<>();
-	private final Set<GraphicsObject> hiddenShadows = new HashSet<>();
+	private final Set<GraphicsObject> hiddenShadows = Collections.newSetFromMap(new IdentityHashMap<>());
+	private final Set<GraphicsObject> attachedShadows = Collections.newSetFromMap(new IdentityHashMap<>());
 	private final List<ShadowClone> shadowClones = new ArrayList<>();
-	private final Set<GraphicsObject> loggedCaptureGfx = new HashSet<>();
+	private final Set<Integer> loggedCaptureIds = new HashSet<>();
 
 	@Provides
 	MadAngelVisualsConfig provideConfig(ConfigManager configManager)
@@ -152,8 +158,15 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 		}
 
 		WorldPoint target = projectile.getTargetPoint();
-		log.debug("Bomb projectile seen target={} remaining={} targetActor={}",
-			target, projectile.getRemainingCycles(), projectile.getTargetActor());
+		// Prefer the event LocalPoint — WorldPoint→LocalPoint breaks in instances.
+		LocalPoint lp = event.getPosition();
+		if (lp == null)
+		{
+			lp = localFromWorld(client, target);
+		}
+
+		log.info("Bomb projectile target={} local={} remaining={} targetActor={}",
+			target, lp, projectile.getRemainingCycles(), projectile.getTargetActor());
 
 		if (!config.remapShadow())
 		{
@@ -166,22 +179,15 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 			return;
 		}
 
-		if (target == null)
-		{
-			return;
-		}
-
-		LocalPoint lp = localFromWorld(client, target);
 		if (lp == null)
 		{
-			log.debug("Could not resolve LocalPoint for bomb target {}", target);
+			log.info("Could not resolve LocalPoint for bomb target {}", target);
 			return;
 		}
 
-		pendingDestinations.add(new PendingDestination(projectile, lp));
+		pendingDestinations.add(new PendingDestination(projectile, target, lp, client.getGameCycle()));
 		logCaptureScan(lp);
 		tryAttachShadowAt(lp);
-		log.debug("Pending shadow recolor at {}", target);
 	}
 
 	@Subscribe
@@ -199,24 +205,15 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 			return;
 		}
 
-		boolean onPending = false;
-		for (PendingDestination pending : pendingDestinations)
-		{
-			if (sameSceneTile(pending.localPoint, lp))
-			{
-				onPending = true;
-				break;
-			}
-		}
-
-		if (!onPending)
+		PendingDestination pending = findPendingFor(lp, go.getLevel());
+		if (pending == null)
 		{
 			return;
 		}
 
-		logCapture(go, true);
+		logCapture(go);
 
-		if (isShadowSpotanim(go.getId()))
+		if (shouldAttach(go, pending))
 		{
 			attachShadow(go);
 		}
@@ -230,6 +227,12 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 			return;
 		}
 
+		// Keep trying to attach while pending — loom gfx may spawn a few frames late.
+		for (PendingDestination pending : pendingDestinations)
+		{
+			tryAttachShadowAt(pending.localPoint);
+		}
+
 		Iterator<ShadowClone> it = shadowClones.iterator();
 		while (it.hasNext())
 		{
@@ -237,6 +240,7 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 			if (clone.isSourceFinished())
 			{
 				hiddenShadows.remove(clone.getSource());
+				attachedShadows.remove(clone.getSource());
 				clone.remove();
 				it.remove();
 				continue;
@@ -269,7 +273,7 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 
 		if (pendingDestinations.isEmpty())
 		{
-			loggedCaptureGfx.clear();
+			loggedCaptureIds.clear();
 		}
 	}
 
@@ -292,7 +296,7 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 	{
 		for (GraphicsObject go : client.getTopLevelWorldView().getGraphicsObjects())
 		{
-			if (go.finished() || !isShadowSpotanim(go.getId()))
+			if (go.finished() || attachedShadows.contains(go))
 			{
 				continue;
 			}
@@ -301,20 +305,71 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 			{
 				continue;
 			}
-			attachShadow(go);
+
+			PendingDestination pending = findPendingFor(goLp, go.getLevel());
+			if (pending == null)
+			{
+				continue;
+			}
+
+			logCapture(go);
+
+			if (shouldAttach(go, pending))
+			{
+				attachShadow(go);
+			}
 		}
+	}
+
+	private boolean shouldAttach(GraphicsObject go, PendingDestination pending)
+	{
+		if (isShadowSpotanim(go.getId()))
+		{
+			return true;
+		}
+
+		// Loom usually spawns with the throw. Accept unknown destination gfx only
+		// in that early window so later slash-dust on the stand tile is ignored.
+		int age = client.getGameCycle() - pending.startCycle;
+		return age >= 0 && age <= EARLY_LOOM_CYCLES;
 	}
 
 	private void attachShadow(GraphicsObject go)
 	{
-		if (!isShadowSpotanim(go.getId()) || hiddenShadows.contains(go))
+		if (attachedShadows.contains(go))
 		{
 			return;
 		}
 
-		hiddenShadows.add(go);
-		shadowClones.add(new ShadowClone(client, go));
-		log.debug("Attached high-contrast shadow clone for gfx id={}", go.getId());
+		attachedShadows.add(go);
+		shadowClones.add(new ShadowClone(client, go, hiddenShadows::add));
+		log.info("Attached high-contrast shadow clone for gfx id={} z={}", go.getId(), go.getZ());
+	}
+
+	@Nullable
+	private PendingDestination findPendingFor(LocalPoint lp, int level)
+	{
+		for (PendingDestination pending : pendingDestinations)
+		{
+			if (sameSceneTile(pending.localPoint, lp))
+			{
+				return pending;
+			}
+			// Instance-safe world match as a backup when scene locals disagree.
+			if (pending.target != null)
+			{
+				WorldPoint goWp = WorldPoint.fromLocalInstance(client, lp);
+				if (goWp == null)
+				{
+					goWp = WorldPoint.fromLocal(client, lp);
+				}
+				if (sameTile(pending.target, goWp) && (level < 0 || pending.target.getPlane() == level))
+				{
+					return pending;
+				}
+			}
+		}
+		return null;
 	}
 
 	private void logCaptureScan(LocalPoint localPoint)
@@ -330,25 +385,24 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 			{
 				continue;
 			}
-			logCapture(go, true);
+			logCapture(go);
 		}
 	}
 
-	private void logCapture(GraphicsObject go, boolean onPendingDestination)
+	private void logCapture(GraphicsObject go)
 	{
-		if (!loggedCaptureGfx.add(go))
+		if (!loggedCaptureIds.add(go.getId()))
 		{
 			return;
 		}
 		LocalPoint lp = go.getLocation();
-		log.debug("Shadow capture gfx id={} onPendingDestination={} shadowCandidate={} scene=({}, {}) plane={} finished={}",
+		log.info("Shadow capture gfx id={} shadowCandidate={} scene=({}, {}) plane={} z={}",
 			go.getId(),
-			onPendingDestination,
 			isShadowSpotanim(go.getId()),
 			lp != null ? lp.getSceneX() : -1,
 			lp != null ? lp.getSceneY() : -1,
 			go.getLevel(),
-			go.finished());
+			go.getZ());
 	}
 
 	private boolean isBounceBackToBoss(Projectile projectile, WorldPoint target)
@@ -394,10 +448,11 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 		}
 		shadowClones.clear();
 		hiddenShadows.clear();
+		attachedShadows.clear();
 		pendingDestinations.clear();
 		seenBombProjectiles.clear();
 		madAngels.clear();
-		loggedCaptureGfx.clear();
+		loggedCaptureIds.clear();
 	}
 
 	@Nullable
@@ -424,6 +479,14 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 		return a.getSceneX() == b.getSceneX() && a.getSceneY() == b.getSceneY();
 	}
 
+	private static boolean sameTile(WorldPoint a, WorldPoint b)
+	{
+		return a != null && b != null
+			&& a.getX() == b.getX()
+			&& a.getY() == b.getY()
+			&& a.getPlane() == b.getPlane();
+	}
+
 	private static boolean isShadowSpotanim(int id)
 	{
 		for (int shadowId : SHADOW_SPOTANIMS)
@@ -439,13 +502,17 @@ public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 	private static final class PendingDestination
 	{
 		private final Projectile projectile;
+		private final WorldPoint target;
 		private final LocalPoint localPoint;
+		private final int startCycle;
 		private int ticksAfterProjectile;
 
-		private PendingDestination(Projectile projectile, LocalPoint localPoint)
+		private PendingDestination(Projectile projectile, WorldPoint target, LocalPoint localPoint, int startCycle)
 		{
 			this.projectile = projectile;
+			this.target = target;
 			this.localPoint = localPoint;
+			this.startCycle = startCycle;
 		}
 	}
 }
