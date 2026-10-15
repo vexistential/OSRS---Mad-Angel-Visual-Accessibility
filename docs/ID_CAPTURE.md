@@ -2,10 +2,14 @@
 
 ## Current behavior
 
-- On player-stand bomb projectile (`4015`): track destination tile; attach high-contrast clone for pinned shadow spotanims on that tile.
-- Vanilla shadow draw is hidden (`RenderCallback.addEntity`); same animated mesh is tinted every `BeforeRender` and shown via `RuneLiteObject`.
-- Bounce-back to Mad Angel: skipped (`targetActor` or footprint).
-- Ball projectile and unrelated VFX: unchanged (no “any gfx on tile” fallback).
+- On player-stand bomb projectile (`4015`): use `ProjectileMoved`’s `LocalPoint` (instance-safe).
+- Track loom gfx on that tile (pinned Mad Angel bomb spotanims, or unknown gfx in the first ~1s after throw).
+- Each `BeforeRender`, recolor that GraphicsObject’s model **in place** (untexture + opaque + max sat/lum).
+- Bounce-back to Mad Angel: skipped. Ball / unrelated late VFX: unchanged.
+
+## Why not hide + RuneLiteObject?
+
+`GraphicsObject.getModel()` returns a **shared temporary model buffer**. Assigning it to a `RuneLiteObject` made other actors (player, boss, random NPCs) appear on the shadow tile. In-place mutation for the same frame’s draw avoids that.
 
 ## Pinned shadow candidates
 
@@ -15,6 +19,6 @@
 | `VFX_MAD_ANGEL_ATTACK_BOMB_THROW_IMPACT_01` | 4016 | Impact / loom candidate |
 | `VFX_MAD_ANGEL_ATTACK_BOMB_THROW_IMPACT_02` | 4017 | Alternate impact / loom candidate |
 
-## Capture (if shadow still dark)
+## Capture
 
-Client logs (INFO) emit `Shadow capture gfx id=...` and `Attached high-contrast shadow clone for gfx id=...` during a stand-destination bomb. Early destination gfx (first ~1s after throw) are also attached so an unlisted loom ID can still remap. If dust is hit, note that ID and we can exclude it; if the loom ID is found, pin it into `SHADOW_SPOTANIMS`.
+INFO logs: `Shadow capture gfx id=...` and `Tracking floor shadow gfx id=...`. Pin a confirmed loom ID into `SHADOW_SPOTANIMS` if needed; exclude dust IDs if the early window catches them.

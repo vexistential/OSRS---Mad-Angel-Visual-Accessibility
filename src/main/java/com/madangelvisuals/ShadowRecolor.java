@@ -7,10 +7,13 @@ import net.runelite.api.Model;
 
 /**
  * High-contrast in-place tint for an animated spotanim model.
- * Clears textures and transparency so face colors actually read as bright.
+ * Forces opaque faces and max sat/lum so the tint reads on dark floors.
  */
 final class ShadowRecolor
 {
+	/** Brightness multiplier into Jagex HSL conversion (>1 pushes luminance up). */
+	private static final double HSL_BRIGHTNESS = 1.5d;
+
 	private ShadowRecolor()
 	{
 	}
@@ -22,7 +25,7 @@ final class ShadowRecolor
 			return;
 		}
 
-		short hsl = JagexColor.rgbToHSL(color.getRGB(), 1.0d);
+		short hsl = JagexColor.rgbToHSL(color.getRGB(), HSL_BRIGHTNESS);
 		int hue = JagexColor.unpackHue(hsl);
 		short bright = JagexColor.packHSL(hue, JagexColor.SATURATION_MAX, JagexColor.LUMINANCE_MAX);
 		int brightInt = bright & 0xFFFF;
@@ -43,6 +46,7 @@ final class ShadowRecolor
 			Arrays.fill(textures, (short) -1);
 		}
 
+		// 0 = opaque in Jagex face alpha. Shadows stay faint if left translucent.
 		byte[] transparencies = model.getFaceTransparencies();
 		if (transparencies != null)
 		{
