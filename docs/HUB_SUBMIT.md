@@ -8,6 +8,9 @@
 - [x] `icon.png` (48×48)
 - [x] `runelite-plugin.properties` with `build=standard`
 - [x] Marker stub at `plugin-hub/mad-angel-light-visuals`
+- [x] Local commit SHA: `4957de42b99070099a30bda0ad53ef215de9cb15`
+- [ ] Public GitHub remote (requires `gh auth login` — not available in this session)
+- [ ] plugin-hub PR (blocked on public repo URL)
 
 ## Steps for you
 
