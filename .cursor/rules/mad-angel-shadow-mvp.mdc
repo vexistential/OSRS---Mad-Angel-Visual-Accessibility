@@ -1,24 +1,29 @@
 ---
-description: Mad Angel Exploding Light shadow highlight — viable MVP baseline
+description: Mad Angel Exploding Light shadow highlight — MVP + fallback checkpoint
 alwaysApply: true
 ---
 
-# Mad Angel shadow highlight — MVP baseline
+# Mad Angel shadow highlight — MVP / fallback
 
-The following approach is a **viable MVP**. Further work is refinement only; do not revert to full-tile fills, `ModelOutlineRenderer`, clickbox AABB outlines, or shared-`getModel()` `RuneLiteObject` clones.
+## Fallback checkpoint (do not lose)
 
-## What works
+**Git commit `a055e9d`** is a significant known-good step. See `docs/FALLBACK.md`.
+Further work is refinement. If a change regresses the outline, revert behavior toward that checkpoint.
+
+## What works (post-checkpoint refinements allowed)
 
 1. Detect bomb projectile `4015` via `ProjectileMoved`; use event `LocalPoint` (instance-safe).
-2. Skip bounce-back to Mad Angel (`targetActor` / footprint).
+2. Skip bounce-back to Mad Angel; **re-arm** when the same projectile later targets a stand tile again (do not forever-dedupe by projectile identity alone).
 3. Track destination `GraphicsObject`s (pinned bomb spotanims + early-window loom candidates).
-4. In-place `BeforeRender` face recolor (`ShadowRecolor`: untexture, opaque, max HSL).
-5. Outline the **shadow mesh** with a **floor-parallel** hull (`ShadowHull`): take the model disc footprint (drop the thin/normal axis), place offsets on the tile via `localToCanvas` at tile height, `Jarvis.convexHull`, bright stroke **no fill**.
+4. In-place `BeforeRender` face recolor (`ShadowRecolor`).
+5. Floor-parallel outline (`ShadowHull`): model disc footprint on the tile via `localToCanvas`, stroke only.
+6. If a stand pending is active but no live shadow gfx yet (e.g. already standing on the tile), draw a floor-circle fallback on that pending tile.
 
 ## Do not
 
 - Full-tile `Perspective.getCanvasTilePoly` as the primary highlight
-- `ModelOutlineRenderer` for these flat floor shadows (often invisible)
-- Prefer `Perspective.getClickbox` for the outline (AABB → square-ish)
-- Project via `modelToCanvas` 3D silhouette (reads as a vertical circle even if Y is flattened)
+- `ModelOutlineRenderer` for these flat floor shadows
+- `Perspective.getClickbox` for the outline (AABB → square-ish)
+- `modelToCanvas` 3D silhouette outlines (read as vertical circles)
 - Assign `GraphicsObject.getModel()` to a `RuneLiteObject` (shared buffer → actor ghosts)
+- Ignore retargeted bomb projectiles after the first `ProjectileMoved` (`seenBombProjectiles` forever-skip)

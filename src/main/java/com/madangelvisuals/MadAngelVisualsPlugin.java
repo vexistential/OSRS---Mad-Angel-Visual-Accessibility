@@ -77,11 +77,11 @@ public class MadAngelVisualsPlugin extends Plugin
 	@Inject
 	private ShadowBorderOverlay shadowBorderOverlay;
 
-	private final Set<Projectile> seenBombProjectiles = new HashSet<>();
 	private final Set<NPC> madAngels = new HashSet<>();
 	private final List<PendingDestination> pendingDestinations = new ArrayList<>();
 	private final Set<GraphicsObject> trackedShadows = Collections.newSetFromMap(new IdentityHashMap<>());
 	private final Set<Integer> loggedCaptureIds = new HashSet<>();
+	private int lastFootprintRadius = ShadowHull.DEFAULT_FALLBACK_RADIUS;
 
 	@Provides
 	MadAngelVisualsConfig provideConfig(ConfigManager configManager)
@@ -126,6 +126,33 @@ public class MadAngelVisualsPlugin extends Plugin
 		return live;
 	}
 
+	/**
+	 * Stand destinations that need a floor-circle fallback because no live shadow
+	 * gfx is currently tracked on that tile (same-tile retarget / already standing).
+	 */
+	Collection<LocalPoint> getFallbackOutlineTiles()
+	{
+		if (pendingDestinations.isEmpty())
+		{
+			return Collections.emptyList();
+		}
+
+		List<LocalPoint> tiles = new ArrayList<>();
+		for (PendingDestination pending : pendingDestinations)
+		{
+			if (!hasLiveShadowOnTile(pending.localPoint))
+			{
+				tiles.add(pending.localPoint);
+			}
+		}
+		return tiles;
+	}
+
+	int getFallbackOutlineRadius()
+	{
+		return lastFootprintRadius > 0 ? lastFootprintRadius : ShadowHull.DEFAULT_FALLBACK_RADIUS;
+	}
+
 	@Subscribe
 	public void onNpcSpawned(NpcSpawned event)
 	{
@@ -162,11 +189,6 @@ public class MadAngelVisualsPlugin extends Plugin
 			return;
 		}
 
-		if (!seenBombProjectiles.add(projectile))
-		{
-			return;
-		}
-
 		WorldPoint target = projectile.getTargetPoint();
 		// Prefer the event LocalPoint — WorldPoint→LocalPoint breaks in instances.
 		LocalPoint lp = event.getPosition();
@@ -175,16 +197,16 @@ public class MadAngelVisualsPlugin extends Plugin
 			lp = localFromWorld(client, target);
 		}
 
-		log.info("Bomb projectile target={} local={} remaining={} targetActor={}",
-			target, lp, projectile.getRemainingCycles(), projectile.getTargetActor());
-
 		if (!config.remapShadow())
 		{
 			return;
 		}
 
+		// Same projectile may hop stand→boss→stand. Clear stand pendings on boss
+		// hops so a later stand destination (including the same tile) can re-arm.
 		if (isBounceBackToBoss(projectile, target))
 		{
+			removePendingsFor(projectile);
 			log.debug("Skipping shadow recolor; bounce-back toward Mad Angel");
 			return;
 		}
@@ -194,6 +216,15 @@ public class MadAngelVisualsPlugin extends Plugin
 			log.info("Could not resolve LocalPoint for bomb target {}", target);
 			return;
 		}
+
+		// Dedupe repeated ProjectileMoved for the same projectile+tile only.
+		if (hasPendingFor(projectile, lp))
+		{
+			return;
+		}
+
+		log.info("Bomb projectile target={} local={} remaining={} targetActor={}",
+			target, lp, projectile.getRemainingCycles(), projectile.getTargetActor());
 
 		pendingDestinations.add(new PendingDestination(projectile, target, lp, client.getGameCycle()));
 		logCaptureScan(lp);
@@ -265,8 +296,6 @@ public class MadAngelVisualsPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
-		seenBombProjectiles.removeIf(p -> p.getRemainingCycles() < 0);
-
 		Iterator<PendingDestination> pendingIt = pendingDestinations.iterator();
 		while (pendingIt.hasNext())
 		{
@@ -353,7 +382,43 @@ public class MadAngelVisualsPlugin extends Plugin
 		{
 			return;
 		}
+
+		lastFootprintRadius = ShadowHull.footprintRadius(go);
 		log.info("Tracking floor shadow gfx id={} z={} for in-place recolor", go.getId(), go.getZ());
+	}
+
+	private boolean hasPendingFor(Projectile projectile, LocalPoint lp)
+	{
+		for (PendingDestination pending : pendingDestinations)
+		{
+			if (pending.projectile == projectile && sameSceneTile(pending.localPoint, lp))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void removePendingsFor(Projectile projectile)
+	{
+		pendingDestinations.removeIf(pending -> pending.projectile == projectile);
+	}
+
+	private boolean hasLiveShadowOnTile(LocalPoint lp)
+	{
+		for (GraphicsObject go : trackedShadows)
+		{
+			if (go.finished())
+			{
+				continue;
+			}
+			LocalPoint goLp = go.getLocation();
+			if (goLp != null && sameSceneTile(lp, goLp))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	@Nullable
@@ -453,9 +518,9 @@ public class MadAngelVisualsPlugin extends Plugin
 	{
 		trackedShadows.clear();
 		pendingDestinations.clear();
-		seenBombProjectiles.clear();
 		madAngels.clear();
 		loggedCaptureIds.clear();
+		lastFootprintRadius = ShadowHull.DEFAULT_FALLBACK_RADIUS;
 	}
 
 	@Nullable

@@ -10,13 +10,14 @@ import java.util.Collection;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.GraphicsObject;
+import net.runelite.api.coords.LocalPoint;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
 
 /**
- * Bright stroke-only outline around the tracked shadow mesh silhouette.
- * No fill — fill made the highlight look like a tile blotch.
+ * Bright stroke-only floor outline around tracked shadow meshes, plus a floor-circle
+ * fallback for active stand destinations that have no live shadow gfx yet.
  */
 class ShadowBorderOverlay extends Overlay
 {
@@ -46,7 +47,8 @@ class ShadowBorderOverlay extends Overlay
 		}
 
 		Collection<GraphicsObject> shadows = plugin.getTrackedShadows();
-		if (shadows.isEmpty())
+		Collection<LocalPoint> fallbackTiles = plugin.getFallbackOutlineTiles();
+		if (shadows.isEmpty() && fallbackTiles.isEmpty())
 		{
 			return null;
 		}
@@ -65,6 +67,17 @@ class ShadowBorderOverlay extends Overlay
 			if (hull != null)
 			{
 				graphics.draw(hull);
+			}
+		}
+
+		int radius = plugin.getFallbackOutlineRadius();
+		int plane = client.getTopLevelWorldView().getPlane();
+		for (LocalPoint tile : fallbackTiles)
+		{
+			Shape circle = ShadowHull.floorCircle(client, tile, plane, radius);
+			if (circle != null)
+			{
+				graphics.draw(circle);
 			}
 		}
 
