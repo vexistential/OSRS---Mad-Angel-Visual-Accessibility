@@ -1,24 +1,18 @@
 # Verification
 
-## Automated / static (done)
+## Automated / static
 
-- [x] `gradlew compileJava` — BUILD SUCCESSFUL
-- [x] No `Perspective` / `getCanvasTilePoly` / overlay tile drawing in `src/`
-- [x] No free-form ID config fields (style enum only)
-- [x] Projectile remap uses Vardorvis/`createProjectile` pattern
-- [x] Shadow amplify hides original gfx + same-tile `RuneLiteObject` marker
+- [x] `compileJava` BUILD SUCCESSFUL
+- [x] No `TelegraphOverlay` / tile polygon fill
+- [x] No projectile remap
+- [x] Bounce-back skip retained
+- [x] Shadow recolor via GraphicsObject model face tint
 
-## In-game (requires your account — cannot be automated)
+## In-game (you)
 
-Jagex rules forbid automating game input. Please:
-
-1. `gradlew.bat run` from the project root
-2. Log in ([Jagex Accounts wiki](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts) if needed)
-3. Enable the plugin **Mad Angel Light Visuals**
-4. Fight Mad Angel and confirm:
-   - [ ] Floor shadow is clearly brighter for all **3** bounces
-   - [ ] Ball remap (if enabled) is visible
-   - [ ] Enrage still looks correct
-   - [ ] Quest and/or post-quest NPC forms work
-   - [ ] Disabling the plugin restores vanilla visuals
-5. Optional: DevTools capture per [ID_CAPTURE.md](ID_CAPTURE.md) to narrow 4016 vs 4017
+1. Relaunch `.\gradlew.bat run`
+2. Confirm:
+   - [ ] Floor shadow on stand destinations looks brightly recolored (not a full tile square overlay)
+   - [ ] Bounce-back under the angel is not highlighted
+   - [ ] Ball looks vanilla
+   - [ ] If shadow is unchanged, note DevTools GraphicsObject ID on that tile

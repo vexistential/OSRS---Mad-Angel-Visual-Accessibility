@@ -11,8 +11,8 @@ public interface MadAngelVisualsConfig extends Config
 
 	@ConfigItem(
 		keyName = "remapShadow",
-		name = "Amplify floor shadow",
-		description = "Replace the Exploding Light floor telegraph with a brighter vanilla-style marker on the same tile.",
+		name = "Recolor floor shadow",
+		description = "Recolor the Exploding Light floor shadow on player-stand destinations (not bounce-back to the boss).",
 		position = 0
 	)
 	default boolean remapShadow()
@@ -21,21 +21,10 @@ public interface MadAngelVisualsConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "remapProjectile",
-		name = "Remap light ball",
-		description = "Replace the Exploding Light projectile with a brighter curated vanilla projectile.",
-		position = 1
-	)
-	default boolean remapProjectile()
-	{
-		return true;
-	}
-
-	@ConfigItem(
 		keyName = "style",
-		name = "Visual style",
-		description = "Curated brighter appearance for the shadow marker and ball projectile.",
-		position = 2
+		name = "Shadow color",
+		description = "Tint applied to the floor shadow.",
+		position = 1
 	)
 	default LightStyle style()
 	{

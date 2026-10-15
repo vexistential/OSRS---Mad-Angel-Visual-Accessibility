@@ -1,44 +1,18 @@
-# Mad Angel Exploding Light — ID capture notes
+# Mad Angel Exploding Light — notes
 
-## Gameval (fact — RuneLite SpotanimID)
+## Hub stance
 
-| Constant | ID | Likely role |
-|----------|----|-------------|
-| `VFX_MAD_ANGEL_ATTACK_BOMB_THROW` | 4014 | Cast VFX |
-| `VFX_MAD_ANGEL_ATTACK_BOMB_THROW_PROJECTILE` | 4015 | Flying ball (**remapped by plugin**) |
-| `VFX_MAD_ANGEL_ATTACK_BOMB_THROW_IMPACT_01` | 4016 | Ground impact / shadow candidate (**amplified**) |
-| `VFX_MAD_ANGEL_ATTACK_BOMB_THROW_IMPACT_02` | 4017 | Alternate impact / bounce candidate (**amplified**) |
+| Approach | Hub outlook |
+|----------|-------------|
+| Full tile fill / stand polygon on destination | **Likely rejected** — automatic stand / projectile-target indicator |
+| Recolor existing floor shadow spotanim | **Preferred** — cosmetic remap of vanilla telegraph |
 
-Animations (reference): `NPC_MAD_ANGEL_ATTACK_BOMB_THROW` = 14443, VFX 14444–14447.
+## Current behavior
 
-NPC combat IDs reported on wiki / earlier gameval dumps: post-quest **16305** / **16307**, quest **16309** / **16311**. Plugin gates on **spotanim IDs only** (Mad Angel–specific), so NPC constants are not required.
+- On player-stand bomb projectile (`4015`): find `GraphicsObject` on that tile (prefer Mad Angel bomb spotanims `4014`/`4016`/`4017`, else any gfx on the tile) and recolor its model faces to the style color each tick until finished.
+- Bounce-back to Mad Angel: skipped (`targetActor` or footprint).
+- Ball projectile: unchanged.
 
-## In-fight checklist (DevTools)
+## If recolor does nothing in-fight
 
-Do this once in a live fight to confirm shadow IDs:
-
-1. Enable **Developer Tools → Graphics Objects** and **Projectiles**.
-2. Trigger **Exploding Light** (blast / bouncing ball).
-3. For each of the three bounces, note:
-   - Projectile ID (expect **4015**)
-   - GraphicsObject ID(s) on the destination tile when the looming shadow appears
-   - Whether **4016**, **4017**, both, or another ID is the shadow
-4. Enrage: confirm the same IDs still apply when the ball is faster.
-5. If only one of 4016/4017 is the shadow, narrow `SHADOW_SPOTANIMS` in `MadAngelVisualsPlugin` to that ID so explosion VFX is left vanilla.
-
-## Capture log template
-
-```
-Date:
-Client version:
-Quest / post-quest:
-Bounce 1: projectile=  gfx on shadow tile=  notes=
-Bounce 2: projectile=  gfx on shadow tile=  notes=
-Bounce 3: projectile=  gfx on shadow tile=  notes=
-Enrage same IDs? Y/N
-```
-
-## Status
-
-- **Projectile 4015:** high confidence (gameval name `..._PROJECTILE`)
-- **Shadow = 4016 and/or 4017:** medium confidence until DevTools capture confirms; plugin currently amplifies both impact spotanims as the Hub-safe “existing telegraph” remap
+The looming shadow may not be a `GraphicsObject` on that tile. Check DevTools → Graphics Objects while the shadow is visible and note the ID on the destination tile; then we can pin `PREFERRED_SHADOW_SPOTANIMS` to that ID.
