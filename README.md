@@ -7,7 +7,7 @@ When the ball is aimed at a **player-stand destination**, the existing floor sha
 ## Features
 
 - High-contrast in-place recolor of the Exploding Light floor shadow
-- Vibrant outline of the shadow mesh (not a full-tile highlight)
+- Vibrant convex-hull outline of the shadow mesh (not a full-tile highlight)
 - Skip bounce-back toward the Mad Angel
 - Vanilla ball projectile
 - Color enum (Magenta / Cyan / Orange / Lime)

@@ -7,7 +7,7 @@
 - [x] No projectile remap
 - [x] No `RuneLiteObject` / shared-`getModel()` clone
 - [x] In-place `BeforeRender` recolor (opaque faces + boosted HSL brightness)
-- [x] Model outline on tracked shadow GraphicsObjects (not full-tile poly)
+- [x] Shadow mesh hull outline via clickbox/convex hull (not full-tile poly, not ModelOutlineRenderer)
 - [x] Bounce-back skip retained
 - [x] Instance-safe projectile `LocalPoint`
 

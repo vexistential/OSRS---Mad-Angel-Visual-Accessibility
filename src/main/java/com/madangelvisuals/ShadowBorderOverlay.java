@@ -1,38 +1,40 @@
 package com.madangelvisuals;
 
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
+import java.awt.Shape;
+import java.awt.Stroke;
 import java.util.Collection;
 import javax.inject.Inject;
+import net.runelite.api.Client;
 import net.runelite.api.GraphicsObject;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
-import net.runelite.client.ui.overlay.outline.ModelOutlineRenderer;
+import net.runelite.client.ui.overlay.OverlayUtil;
 
 /**
- * Outlines the tracked Exploding Light shadow GraphicsObject mesh itself
- * (not the whole tile).
+ * Draws a vibrant hull/outline around the tracked shadow GraphicsObject mesh
+ * (not the whole tile). Uses canvas projection rather than ModelOutlineRenderer,
+ * which fails to visibly outline flat floor shadows.
  */
 class ShadowBorderOverlay extends Overlay
 {
-	private static final int OUTLINE_WIDTH = 3;
-	private static final int OUTLINE_FEATHER = 2;
+	private static final int FILL_ALPHA = 70;
+	private static final float BORDER_WIDTH = 4f;
 
+	private final Client client;
 	private final MadAngelVisualsPlugin plugin;
 	private final MadAngelVisualsConfig config;
-	private final ModelOutlineRenderer modelOutlineRenderer;
 
 	@Inject
-	ShadowBorderOverlay(
-		MadAngelVisualsPlugin plugin,
-		MadAngelVisualsConfig config,
-		ModelOutlineRenderer modelOutlineRenderer)
+	ShadowBorderOverlay(Client client, MadAngelVisualsPlugin plugin, MadAngelVisualsConfig config)
 	{
+		this.client = client;
 		this.plugin = plugin;
 		this.config = config;
-		this.modelOutlineRenderer = modelOutlineRenderer;
 		setPosition(OverlayPosition.DYNAMIC);
 		setLayer(OverlayLayer.ABOVE_SCENE);
 		setPriority(PRIORITY_MED);
@@ -52,14 +54,18 @@ class ShadowBorderOverlay extends Overlay
 			return null;
 		}
 
-		Color color = config.style().getShadowColor();
+		Color style = config.style().getShadowColor();
+		Color border = new Color(style.getRed(), style.getGreen(), style.getBlue(), 255);
+		Color fill = new Color(style.getRed(), style.getGreen(), style.getBlue(), FILL_ALPHA);
+		Stroke stroke = new BasicStroke(BORDER_WIDTH);
+
 		for (GraphicsObject shadow : shadows)
 		{
-			if (shadow.finished())
+			Shape hull = ShadowHull.of(client, shadow);
+			if (hull != null)
 			{
-				continue;
+				OverlayUtil.renderPolygon(graphics, hull, border, fill, stroke);
 			}
-			modelOutlineRenderer.drawOutline(shadow, OUTLINE_WIDTH, color, OUTLINE_FEATHER);
 		}
 
 		return null;
