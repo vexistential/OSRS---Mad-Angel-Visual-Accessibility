@@ -7,18 +7,18 @@ import net.runelite.api.Client;
 import net.runelite.api.GraphicsObject;
 import net.runelite.api.Model;
 import net.runelite.api.Perspective;
+import net.runelite.api.Point;
 import net.runelite.api.WorldView;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.model.Jarvis;
 
 /**
- * Floor-parallel outline of a shadow GraphicsObject.
+ * Builds a floor-parallel outline of a shadow GraphicsObject.
  * <p>
- * Collapses model vertices onto the model's lowest Y (ground contact) before
- * projecting, so the convex hull lies on the floor plane instead of forming a
- * vertical billboard circle from the full 3D silhouette.
- * <p>
- * Do not use {@link Perspective#getClickbox} — it often returns an AABB.
+ * Finds the model's thin axis (disc normal), takes the other two axes as the
+ * footprint, places those offsets on the tile plane, and projects with
+ * {@link Perspective#localToCanvas}. That matches tile polygons visually —
+ * lying flat — instead of a vertical 3D silhouette from {@code modelToCanvas}.
  */
 final class ShadowHull
 {
@@ -61,23 +61,90 @@ final class ShadowHull
 			return null;
 		}
 
-		// Flatten onto the floor contact plane (min model Y) so the hull is
-		// parallel to the ground, matching the looming shadow disc.
-		float floorY = vy[0];
-		for (int i = 1; i < vertexCount; i++)
-		{
-			if (vy[i] < floorY)
-			{
-				floorY = vy[i];
-			}
-		}
-		float[] flatY = new float[vertexCount];
-		Arrays.fill(flatY, floorY);
+		// Disc normal = axis with least spread; the other two span the footprint.
+		int normalAxis = thinnestAxis(vx, vy, vz, vertexCount);
+		float[] axisU = axis(vx, vy, vz, (normalAxis + 1) % 3);
+		float[] axisV = axis(vx, vy, vz, (normalAxis + 2) % 3);
 
-		int z = graphicsObject.getZ() - graphicsObject.getAnimationHeightOffset();
+		int plane = graphicsObject.getLevel();
+		int worldViewId = wv.getId();
 		int[] x2d = new int[vertexCount];
 		int[] y2d = new int[vertexCount];
-		Perspective.modelToCanvas(client, wv, vertexCount, lp.getX(), lp.getY(), z, 0, vx, flatY, vz, x2d, y2d);
-		return Jarvis.convexHull(x2d, y2d);
+		int projected = 0;
+
+		for (int i = 0; i < vertexCount; i++)
+		{
+			int sceneX = lp.getX() + Math.round(axisU[i]);
+			int sceneY = lp.getY() + Math.round(axisV[i]);
+			LocalPoint groundPoint = new LocalPoint(sceneX, sceneY, worldViewId);
+			int groundHeight = Perspective.getTileHeight(client, groundPoint, plane);
+			Point canvas = Perspective.localToCanvas(client, sceneX, sceneY, groundHeight);
+			if (canvas != null)
+			{
+				x2d[projected] = canvas.getX();
+				y2d[projected] = canvas.getY();
+				projected++;
+			}
+		}
+
+		if (projected < 3)
+		{
+			return null;
+		}
+
+		return Jarvis.convexHull(Arrays.copyOf(x2d, projected), Arrays.copyOf(y2d, projected));
+	}
+
+	private static int thinnestAxis(float[] vx, float[] vy, float[] vz, int count)
+	{
+		float spreadX = spread(vx, count);
+		float spreadY = spread(vy, count);
+		float spreadZ = spread(vz, count);
+
+		int axis = 0;
+		float min = spreadX;
+		if (spreadY < min)
+		{
+			min = spreadY;
+			axis = 1;
+		}
+		if (spreadZ < min)
+		{
+			axis = 2;
+		}
+		return axis;
+	}
+
+	private static float spread(float[] values, int count)
+	{
+		float min = values[0];
+		float max = values[0];
+		for (int i = 1; i < count; i++)
+		{
+			float v = values[i];
+			if (v < min)
+			{
+				min = v;
+			}
+			if (v > max)
+			{
+				max = v;
+			}
+		}
+		return max - min;
+	}
+
+	private static float[] axis(float[] vx, float[] vy, float[] vz, int index)
+	{
+		switch (index)
+		{
+			case 1:
+				return vy;
+			case 2:
+				return vz;
+			case 0:
+			default:
+				return vx;
+		}
 	}
 }

@@ -13,9 +13,9 @@
 
 ## MVP outline path (viable — refine, don’t replace)
 
-- Flatten model vertices to min Y (floor contact), `modelToCanvas` + `Jarvis.convexHull`, stroke only (no fill) so the outline lies parallel to the floor.
-- Do **not** project the full 3D silhouette (reads as a vertical circle).
-- Do **not** use `getClickbox` (AABB → square-ish), full-tile polys, or `ModelOutlineRenderer`.
+- Floor footprint: drop the model’s thin (normal) axis, map the other two onto scene X/Y, `localToCanvas` at tile height, `Jarvis.convexHull`, stroke only.
+- Do **not** use `modelToCanvas` for the outline (3D→2D silhouette reads vertical).
+- Do **not** use `getClickbox`, full-tile polys, or `ModelOutlineRenderer`.
 
 ## Pinned shadow candidates
 
