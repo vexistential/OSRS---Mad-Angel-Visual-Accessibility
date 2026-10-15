@@ -6,13 +6,16 @@
 - [x] No `TelegraphOverlay` / tile polygon fill
 - [x] No projectile remap
 - [x] Bounce-back skip retained
-- [x] Shadow recolor via GraphicsObject model face tint
+- [x] Every-frame `ShadowRecolor` via `BeforeRender`
+- [x] Hide vanilla shadow + same-shape `RuneLiteObject` clone
+- [x] No arbitrary tile-VFX recolor fallback
 
 ## In-game (you)
 
 1. Relaunch `.\gradlew.bat run`
 2. Confirm:
-   - [ ] Floor shadow on stand destinations looks brightly recolored (not a full tile square overlay)
-   - [ ] Bounce-back under the angel is not highlighted
+   - [ ] Stand destinations: floor shadow itself is neon / high-contrast (same footprint as vanilla loom)
+   - [ ] Bounce-back under the angel is not recolored
    - [ ] Ball looks vanilla
-   - [ ] If shadow is unchanged, note DevTools GraphicsObject ID on that tile
+   - [ ] Sword-slash dust is not recolored
+3. If shadow unchanged, check debug logs for `Shadow capture gfx id=` on the destination tile and pin that ID.

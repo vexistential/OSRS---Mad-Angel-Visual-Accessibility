@@ -1,14 +1,41 @@
-.gradle
-build
+# Gradle
+.gradle/
+build/
+bin/
+
+# Java / build artifacts
+*.class
+*.jar
+*.war
+*.ear
+out/
+*.tmp
+.tmp/
+
+# IDEs
 .idea/
+*.iml
 .project
-.settings/
 .classpath
+.settings/
+.vscode/
 nbactions.xml
 nb-configuration.xml
 nbproject/
-*.class
-out/
-runs/
-*.iml
+
+# OS
 .DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local / secrets
+*.log
+local.properties
+credentials.json
+.jagex_cache*
+
+# AI workflow / agent scaffolding (not plugin source)
+runs/
+_workflow_log.md
+_classify_log.jsonl
+2026-*-*.md

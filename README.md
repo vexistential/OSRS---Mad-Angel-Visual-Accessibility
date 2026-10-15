@@ -2,15 +2,11 @@
 
 Accessibility-focused **recolor** of the Mad Angel (Wyrmscraig) **Exploding Light** floor shadow.
 
-When the ball is aimed at a **player-stand destination**, the existing floor shadow spotanim on that tile is tinted a bright curated color. The ball projectile is unchanged. Bounce-back toward the boss is not recolored.
-
-## Why not a full tile highlight?
-
-Jagex’s third-party client guidelines and RuneLite Hub policy treat automatic stand-tile / projectile-landing highlights as prohibited for bosses. Recoloring the game’s own shadow telegraph is the Hub-safer approach (same family as cosmetic projectile remaps).
+When the ball is aimed at a **player-stand destination**, the existing floor shadow is hidden and redrawn as the **same mesh** in a high-contrast curated color. The ball projectile is unchanged. Bounce-back toward the boss is not recolored.
 
 ## Features
 
-- Recolor the Exploding Light floor shadow on stand destinations
+- High-contrast recolor of the Exploding Light floor shadow (same shape)
 - Skip bounce-back toward the Mad Angel
 - Vanilla ball projectile
 - Color enum (Magenta / Cyan / Orange / Lime)
@@ -21,9 +17,11 @@ Jagex’s third-party client guidelines and RuneLite Hub policy treat automatic 
 .\gradlew.bat run
 ```
 
+Jagex accounts: follow [Using Jagex Accounts](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
+
 ## Configuration
 
 | Setting | Description |
 |---------|-------------|
-| Recolor floor shadow | Enable shadow tinting |
+| Recolor floor shadow | Enable shadow recolor |
 | Shadow color | Magenta / Cyan / Orange / Lime |

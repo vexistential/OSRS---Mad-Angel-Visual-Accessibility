@@ -13,11 +13,12 @@ import net.runelite.api.Actor;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.GraphicsObject;
-import net.runelite.api.Model;
 import net.runelite.api.NPC;
 import net.runelite.api.Projectile;
+import net.runelite.api.Renderable;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.events.BeforeRender;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.GraphicsObjectCreated;
@@ -26,6 +27,8 @@ import net.runelite.api.events.NpcDespawned;
 import net.runelite.api.events.NpcSpawned;
 import net.runelite.api.events.ProjectileMoved;
 import net.runelite.api.gameval.SpotanimID;
+import net.runelite.client.callback.RenderCallback;
+import net.runelite.client.callback.RenderCallbackManager;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
@@ -33,7 +36,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 
 /**
  * Recolors Mad Angel Exploding Light floor shadows on player-stand destinations.
- * Does not alter the ball projectile or draw tile-fill stand markers.
+ * Hides the vanilla dark draw and shows the same mesh in a high-contrast tint.
  */
 @Slf4j
 @PluginDescriptor(
@@ -41,19 +44,20 @@ import net.runelite.client.plugins.PluginDescriptor;
 	description = "Recolors Mad Angel Exploding Light floor shadows for accessibility",
 	tags = {"mad angel", "wyrmscraig", "pvm", "accessibility", "visuals"}
 )
-public class MadAngelVisualsPlugin extends Plugin
+public class MadAngelVisualsPlugin extends Plugin implements RenderCallback
 {
 	/**
-	 * Only these Mad Angel bomb spotanims are recolored — never arbitrary tile VFX
-	 * (e.g. sword-slash dust).
+	 * Candidate loom / bomb ground spotanims. Capture logs may reveal additional
+	 * IDs to pin here — never fall back to arbitrary tile VFX.
 	 */
 	private static final int[] SHADOW_SPOTANIMS = {
+		SpotanimID.VFX_MAD_ANGEL_ATTACK_BOMB_THROW,
 		SpotanimID.VFX_MAD_ANGEL_ATTACK_BOMB_THROW_IMPACT_01,
 		SpotanimID.VFX_MAD_ANGEL_ATTACK_BOMB_THROW_IMPACT_02,
-		SpotanimID.VFX_MAD_ANGEL_ATTACK_BOMB_THROW,
 	};
 
-	private static final int PENDING_EXTRA_TICKS = 10;
+	/** Keep scanning destination tiles briefly after the ball despawns. */
+	private static final int PENDING_EXTRA_TICKS = 8;
 
 	@Inject
 	private Client client;
@@ -61,10 +65,15 @@ public class MadAngelVisualsPlugin extends Plugin
 	@Inject
 	private MadAngelVisualsConfig config;
 
+	@Inject
+	private RenderCallbackManager renderCallbackManager;
+
 	private final Set<Projectile> seenBombProjectiles = new HashSet<>();
 	private final Set<NPC> madAngels = new HashSet<>();
 	private final List<PendingDestination> pendingDestinations = new ArrayList<>();
-	private final List<GraphicsObject> recoloredShadows = new ArrayList<>();
+	private final Set<GraphicsObject> hiddenShadows = new HashSet<>();
+	private final List<ShadowClone> shadowClones = new ArrayList<>();
+	private final Set<GraphicsObject> loggedCaptureGfx = new HashSet<>();
 
 	@Provides
 	MadAngelVisualsConfig provideConfig(ConfigManager configManager)
@@ -75,6 +84,7 @@ public class MadAngelVisualsPlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
+		renderCallbackManager.register(this);
 		scanMadAngels();
 		log.debug("Mad Angel Light Visuals started");
 	}
@@ -82,8 +92,22 @@ public class MadAngelVisualsPlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
+		renderCallbackManager.unregister(this);
 		clearState();
 		log.debug("Mad Angel Light Visuals stopped");
+	}
+
+	/**
+	 * Hide vanilla dark shadow entities so only the bright same-shape clone draws.
+	 */
+	@Override
+	public boolean addEntity(Renderable renderable, boolean ui)
+	{
+		if (renderable instanceof GraphicsObject && hiddenShadows.contains(renderable))
+		{
+			return false;
+		}
+		return true;
 	}
 
 	@Subscribe
@@ -154,8 +178,9 @@ public class MadAngelVisualsPlugin extends Plugin
 			return;
 		}
 
-		pendingDestinations.add(new PendingDestination(projectile, target, lp));
-		tryRecolorAtDestination(lp);
+		pendingDestinations.add(new PendingDestination(projectile, lp));
+		logCaptureScan(lp);
+		tryAttachShadowAt(lp);
 		log.debug("Pending shadow recolor at {}", target);
 	}
 
@@ -168,28 +193,55 @@ public class MadAngelVisualsPlugin extends Plugin
 		}
 
 		GraphicsObject go = event.getGraphicsObject();
-		if (!isShadowSpotanim(go.getId()))
-		{
-			return;
-		}
-
 		LocalPoint lp = go.getLocation();
 		if (lp == null)
 		{
 			return;
 		}
 
+		boolean onPending = false;
 		for (PendingDestination pending : pendingDestinations)
 		{
 			if (sameSceneTile(pending.localPoint, lp))
 			{
-				if (trackAndRecolor(go))
-				{
-					log.debug("Recolored shadow gfx id={} at scene ({}, {})",
-						go.getId(), lp.getSceneX(), lp.getSceneY());
-				}
-				return;
+				onPending = true;
+				break;
 			}
+		}
+
+		if (!onPending)
+		{
+			return;
+		}
+
+		logCapture(go, true);
+
+		if (isShadowSpotanim(go.getId()))
+		{
+			attachShadow(go);
+		}
+	}
+
+	@Subscribe
+	public void onBeforeRender(BeforeRender event)
+	{
+		if (!config.remapShadow())
+		{
+			return;
+		}
+
+		Iterator<ShadowClone> it = shadowClones.iterator();
+		while (it.hasNext())
+		{
+			ShadowClone clone = it.next();
+			if (clone.isSourceFinished())
+			{
+				hiddenShadows.remove(clone.getSource());
+				clone.remove();
+				it.remove();
+				continue;
+			}
+			clone.update(config.style().getShadowColor());
 		}
 	}
 
@@ -211,19 +263,13 @@ public class MadAngelVisualsPlugin extends Plugin
 					continue;
 				}
 			}
-			tryRecolorAtDestination(pending.localPoint);
+			logCaptureScan(pending.localPoint);
+			tryAttachShadowAt(pending.localPoint);
 		}
 
-		Iterator<GraphicsObject> shadowIt = recoloredShadows.iterator();
-		while (shadowIt.hasNext())
+		if (pendingDestinations.isEmpty())
 		{
-			GraphicsObject go = shadowIt.next();
-			if (go.finished())
-			{
-				shadowIt.remove();
-				continue;
-			}
-			ShadowRecolor.apply(go.getModel(), config.style().getShadowColor());
+			loggedCaptureGfx.clear();
 		}
 	}
 
@@ -242,7 +288,7 @@ public class MadAngelVisualsPlugin extends Plugin
 		}
 	}
 
-	private void tryRecolorAtDestination(LocalPoint localPoint)
+	private void tryAttachShadowAt(LocalPoint localPoint)
 	{
 		for (GraphicsObject go : client.getTopLevelWorldView().getGraphicsObjects())
 		{
@@ -255,32 +301,54 @@ public class MadAngelVisualsPlugin extends Plugin
 			{
 				continue;
 			}
-			trackAndRecolor(go);
+			attachShadow(go);
 		}
 	}
 
-	private boolean trackAndRecolor(GraphicsObject go)
+	private void attachShadow(GraphicsObject go)
 	{
-		if (!isShadowSpotanim(go.getId()))
+		if (!isShadowSpotanim(go.getId()) || hiddenShadows.contains(go))
 		{
-			return false;
+			return;
 		}
 
-		if (recoloredShadows.contains(go))
-		{
-			ShadowRecolor.apply(go.getModel(), config.style().getShadowColor());
-			return true;
-		}
+		hiddenShadows.add(go);
+		shadowClones.add(new ShadowClone(client, go));
+		log.debug("Attached high-contrast shadow clone for gfx id={}", go.getId());
+	}
 
-		Model model = go.getModel();
-		if (model == null)
+	private void logCaptureScan(LocalPoint localPoint)
+	{
+		for (GraphicsObject go : client.getTopLevelWorldView().getGraphicsObjects())
 		{
-			return false;
+			if (go.finished())
+			{
+				continue;
+			}
+			LocalPoint goLp = go.getLocation();
+			if (goLp == null || !sameSceneTile(localPoint, goLp))
+			{
+				continue;
+			}
+			logCapture(go, true);
 		}
+	}
 
-		recoloredShadows.add(go);
-		ShadowRecolor.apply(model, config.style().getShadowColor());
-		return true;
+	private void logCapture(GraphicsObject go, boolean onPendingDestination)
+	{
+		if (!loggedCaptureGfx.add(go))
+		{
+			return;
+		}
+		LocalPoint lp = go.getLocation();
+		log.debug("Shadow capture gfx id={} onPendingDestination={} shadowCandidate={} scene=({}, {}) plane={} finished={}",
+			go.getId(),
+			onPendingDestination,
+			isShadowSpotanim(go.getId()),
+			lp != null ? lp.getSceneX() : -1,
+			lp != null ? lp.getSceneY() : -1,
+			go.getLevel(),
+			go.finished());
 	}
 
 	private boolean isBounceBackToBoss(Projectile projectile, WorldPoint target)
@@ -320,10 +388,16 @@ public class MadAngelVisualsPlugin extends Plugin
 
 	private void clearState()
 	{
+		for (ShadowClone clone : shadowClones)
+		{
+			clone.remove();
+		}
+		shadowClones.clear();
+		hiddenShadows.clear();
+		pendingDestinations.clear();
 		seenBombProjectiles.clear();
 		madAngels.clear();
-		pendingDestinations.clear();
-		recoloredShadows.clear();
+		loggedCaptureGfx.clear();
 	}
 
 	@Nullable
@@ -365,14 +439,12 @@ public class MadAngelVisualsPlugin extends Plugin
 	private static final class PendingDestination
 	{
 		private final Projectile projectile;
-		private final WorldPoint target;
 		private final LocalPoint localPoint;
 		private int ticksAfterProjectile;
 
-		private PendingDestination(Projectile projectile, WorldPoint target, LocalPoint localPoint)
+		private PendingDestination(Projectile projectile, LocalPoint localPoint)
 		{
 			this.projectile = projectile;
-			this.target = target;
 			this.localPoint = localPoint;
 		}
 	}

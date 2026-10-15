@@ -23,7 +23,7 @@ public interface MadAngelVisualsConfig extends Config
 	@ConfigItem(
 		keyName = "style",
 		name = "Shadow color",
-		description = "Tint applied to the floor shadow.",
+		description = "High-contrast tint applied to the floor shadow.",
 		position = 1
 	)
 	default LightStyle style()

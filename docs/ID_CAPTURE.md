@@ -1,18 +1,20 @@
 # Mad Angel Exploding Light — notes
 
-## Hub stance
-
-| Approach | Hub outlook |
-|----------|-------------|
-| Full tile fill / stand polygon on destination | **Likely rejected** — automatic stand / projectile-target indicator |
-| Recolor existing floor shadow spotanim | **Preferred** — cosmetic remap of vanilla telegraph |
-
 ## Current behavior
 
-- On player-stand bomb projectile (`4015`): find `GraphicsObject` on that tile (prefer Mad Angel bomb spotanims `4014`/`4016`/`4017`, else any gfx on the tile) and recolor its model faces to the style color each tick until finished.
+- On player-stand bomb projectile (`4015`): track destination tile; attach high-contrast clone for pinned shadow spotanims on that tile.
+- Vanilla shadow draw is hidden (`RenderCallback.addEntity`); same animated mesh is tinted every `BeforeRender` and shown via `RuneLiteObject`.
 - Bounce-back to Mad Angel: skipped (`targetActor` or footprint).
-- Ball projectile: unchanged.
+- Ball projectile and unrelated VFX: unchanged (no “any gfx on tile” fallback).
 
-## If recolor does nothing in-fight
+## Pinned shadow candidates
 
-The looming shadow may not be a `GraphicsObject` on that tile. Check DevTools → Graphics Objects while the shadow is visible and note the ID on the destination tile; then we can pin `PREFERRED_SHADOW_SPOTANIMS` to that ID.
+| Constant | ID | Role |
+|----------|----|------|
+| `VFX_MAD_ANGEL_ATTACK_BOMB_THROW` | 4014 | Cast / ground candidate |
+| `VFX_MAD_ANGEL_ATTACK_BOMB_THROW_IMPACT_01` | 4016 | Impact / loom candidate |
+| `VFX_MAD_ANGEL_ATTACK_BOMB_THROW_IMPACT_02` | 4017 | Alternate impact / loom candidate |
+
+## Capture (if shadow still dark)
+
+With `--debug` / developer mode, look for `Shadow capture gfx id=... onPendingDestination=true` during a stand-destination bomb. If the loom shadow uses an ID outside the table above, pin that ID into `SHADOW_SPOTANIMS` in `MadAngelVisualsPlugin`.
