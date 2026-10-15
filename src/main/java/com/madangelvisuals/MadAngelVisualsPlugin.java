@@ -38,8 +38,8 @@ import net.runelite.client.ui.overlay.OverlayManager;
 
 /**
  * Recolors Mad Angel Exploding Light floor shadows on player-stand destinations.
- * Mutates the shadow GraphicsObject model in place each frame and draws a vibrant
- * border around tracked shadow tiles for readability.
+ * Mutates the shadow GraphicsObject model in place each frame and outlines the
+ * shadow mesh itself for readability.
  */
 @Slf4j
 @PluginDescriptor(
@@ -106,29 +106,24 @@ public class MadAngelVisualsPlugin extends Plugin
 	}
 
 	/**
-	 * Local tiles of currently tracked (live) floor shadows for the border overlay.
+	 * Live floor-shadow GraphicsObjects for model outline (not tile fill).
 	 */
-	Collection<LocalPoint> getTrackedShadowTiles()
+	Collection<GraphicsObject> getTrackedShadows()
 	{
 		if (trackedShadows.isEmpty())
 		{
 			return Collections.emptyList();
 		}
 
-		List<LocalPoint> tiles = new ArrayList<>(trackedShadows.size());
+		List<GraphicsObject> live = new ArrayList<>(trackedShadows.size());
 		for (GraphicsObject go : trackedShadows)
 		{
-			if (go.finished())
+			if (!go.finished())
 			{
-				continue;
-			}
-			LocalPoint lp = go.getLocation();
-			if (lp != null)
-			{
-				tiles.add(lp);
+				live.add(go);
 			}
 		}
-		return tiles;
+		return live;
 	}
 
 	@Subscribe

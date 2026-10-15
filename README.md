@@ -2,12 +2,12 @@
 
 Accessibility-focused **recolor** of the Mad Angel (Wyrmscraig) **Exploding Light** floor shadow.
 
-When the ball is aimed at a **player-stand destination**, the existing floor shadow spotanim is tinted a bright curated color in place each frame, with a vibrant border around that shadow tile. The ball projectile is unchanged. Bounce-back toward the boss is not recolored.
+When the ball is aimed at a **player-stand destination**, the existing floor shadow spotanim is tinted a bright curated color in place each frame, with a vibrant outline of the shadow mesh itself. The ball projectile is unchanged. Bounce-back toward the boss is not recolored.
 
 ## Features
 
 - High-contrast in-place recolor of the Exploding Light floor shadow
-- Vibrant border around tracked shadow tiles
+- Vibrant outline of the shadow mesh (not a full-tile highlight)
 - Skip bounce-back toward the Mad Angel
 - Vanilla ball projectile
 - Color enum (Magenta / Cyan / Orange / Lime)

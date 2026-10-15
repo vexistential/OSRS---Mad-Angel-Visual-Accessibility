@@ -1,40 +1,38 @@
 package com.madangelvisuals;
 
-import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
-import java.awt.Polygon;
-import java.awt.Stroke;
 import java.util.Collection;
 import javax.inject.Inject;
-import net.runelite.api.Client;
-import net.runelite.api.Perspective;
-import net.runelite.api.coords.LocalPoint;
+import net.runelite.api.GraphicsObject;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
-import net.runelite.client.ui.overlay.OverlayUtil;
+import net.runelite.client.ui.overlay.outline.ModelOutlineRenderer;
 
 /**
- * Vibrant border (and light fill) around tracked Exploding Light shadow tiles
- * so the recolored shadow remains readable when the mesh itself stays faint.
+ * Outlines the tracked Exploding Light shadow GraphicsObject mesh itself
+ * (not the whole tile).
  */
 class ShadowBorderOverlay extends Overlay
 {
-	private static final int FILL_ALPHA = 90;
-	private static final float BORDER_WIDTH = 4f;
+	private static final int OUTLINE_WIDTH = 3;
+	private static final int OUTLINE_FEATHER = 2;
 
-	private final Client client;
 	private final MadAngelVisualsPlugin plugin;
 	private final MadAngelVisualsConfig config;
+	private final ModelOutlineRenderer modelOutlineRenderer;
 
 	@Inject
-	ShadowBorderOverlay(Client client, MadAngelVisualsPlugin plugin, MadAngelVisualsConfig config)
+	ShadowBorderOverlay(
+		MadAngelVisualsPlugin plugin,
+		MadAngelVisualsConfig config,
+		ModelOutlineRenderer modelOutlineRenderer)
 	{
-		this.client = client;
 		this.plugin = plugin;
 		this.config = config;
+		this.modelOutlineRenderer = modelOutlineRenderer;
 		setPosition(OverlayPosition.DYNAMIC);
 		setLayer(OverlayLayer.ABOVE_SCENE);
 		setPriority(PRIORITY_MED);
@@ -48,24 +46,20 @@ class ShadowBorderOverlay extends Overlay
 			return null;
 		}
 
-		Collection<LocalPoint> tiles = plugin.getTrackedShadowTiles();
-		if (tiles.isEmpty())
+		Collection<GraphicsObject> shadows = plugin.getTrackedShadows();
+		if (shadows.isEmpty())
 		{
 			return null;
 		}
 
-		Color style = config.style().getShadowColor();
-		Color border = new Color(style.getRed(), style.getGreen(), style.getBlue(), 255);
-		Color fill = new Color(style.getRed(), style.getGreen(), style.getBlue(), FILL_ALPHA);
-		Stroke stroke = new BasicStroke(BORDER_WIDTH);
-
-		for (LocalPoint lp : tiles)
+		Color color = config.style().getShadowColor();
+		for (GraphicsObject shadow : shadows)
 		{
-			Polygon poly = Perspective.getCanvasTilePoly(client, lp);
-			if (poly != null)
+			if (shadow.finished())
 			{
-				OverlayUtil.renderPolygon(graphics, poly, border, fill, stroke);
+				continue;
 			}
+			modelOutlineRenderer.drawOutline(shadow, OUTLINE_WIDTH, color, OUTLINE_FEATHER);
 		}
 
 		return null;

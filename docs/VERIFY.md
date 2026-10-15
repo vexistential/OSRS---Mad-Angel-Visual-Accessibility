@@ -7,7 +7,7 @@
 - [x] No projectile remap
 - [x] No `RuneLiteObject` / shared-`getModel()` clone
 - [x] In-place `BeforeRender` recolor (opaque faces + boosted HSL brightness)
-- [x] Vibrant border overlay on tracked shadow tiles
+- [x] Model outline on tracked shadow GraphicsObjects (not full-tile poly)
 - [x] Bounce-back skip retained
 - [x] Instance-safe projectile `LocalPoint`
 
@@ -16,7 +16,7 @@
 1. Relaunch `.\gradlew.bat run`
 2. Confirm:
    - [ ] No player/NPC clones spawning on the shadow tile
-   - [ ] Stand-destination floor shadow is recolored and outlined with a bright border
+   - [ ] Stand-destination floor shadow is recolored and outlined along its mesh (not a full tile square)
    - [ ] Bounce-back under the angel is not recolored/outlined
    - [ ] Ball looks vanilla
    - [ ] Sword-slash dust is not recolored (or note ID if early window catches it)
