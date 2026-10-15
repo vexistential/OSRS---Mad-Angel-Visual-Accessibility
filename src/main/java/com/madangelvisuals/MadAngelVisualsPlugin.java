@@ -81,6 +81,8 @@ public class MadAngelVisualsPlugin extends Plugin
 	private final List<PendingDestination> pendingDestinations = new ArrayList<>();
 	private final Set<GraphicsObject> trackedShadows = Collections.newSetFromMap(new IdentityHashMap<>());
 	private final Set<Integer> loggedCaptureIds = new HashSet<>();
+	/** Scene keys that were drawing fallback last render (transition logging). */
+	private final Set<Long> fallbackActiveKeys = new HashSet<>();
 	private int lastFootprintRadius = ShadowHull.DEFAULT_FALLBACK_RADIUS;
 
 	@Provides
@@ -128,23 +130,30 @@ public class MadAngelVisualsPlugin extends Plugin
 
 	/**
 	 * Stand destinations that need a floor-circle fallback because no live shadow
-	 * gfx is currently tracked on that tile (same-tile retarget / already standing).
+	 * gfx has appeared yet (same-tile retarget / already standing). Once a shadow
+	 * was seen for that pending, fallback must not reappear after the gfx ends.
 	 */
 	Collection<LocalPoint> getFallbackOutlineTiles()
 	{
+		Set<Long> nowActive = new HashSet<>();
 		if (pendingDestinations.isEmpty())
 		{
+			logFallbackTransitions(nowActive);
 			return Collections.emptyList();
 		}
 
 		List<LocalPoint> tiles = new ArrayList<>();
 		for (PendingDestination pending : pendingDestinations)
 		{
-			if (!hasLiveShadowOnTile(pending.localPoint))
+			// Fallback only before the first live shadow — never after it dies.
+			if (pending.sawShadow || hasLiveShadowOnTile(pending.localPoint))
 			{
-				tiles.add(pending.localPoint);
+				continue;
 			}
+			tiles.add(pending.localPoint);
+			nowActive.add(sceneKey(pending.localPoint));
 		}
+		logFallbackTransitions(nowActive);
 		return tiles;
 	}
 
@@ -190,7 +199,7 @@ public class MadAngelVisualsPlugin extends Plugin
 		}
 
 		WorldPoint target = projectile.getTargetPoint();
-		// Prefer the event LocalPoint — WorldPoint→LocalPoint breaks in instances.
+		// Event position is the projectile target LocalPoint (instance-safe).
 		LocalPoint lp = event.getPosition();
 		if (lp == null)
 		{
@@ -204,10 +213,13 @@ public class MadAngelVisualsPlugin extends Plugin
 
 		// Same projectile may hop stand→boss→stand. Clear stand pendings on boss
 		// hops so a later stand destination (including the same tile) can re-arm.
-		if (isBounceBackToBoss(projectile, target))
+		String bounceReason = bounceBackReason(projectile);
+		if (bounceReason != null)
 		{
-			removePendingsFor(projectile);
-			log.debug("Skipping shadow recolor; bounce-back toward Mad Angel");
+			clearAllPendings("bounce");
+			log.info("SKIP_BOUNCE reason={} target={} local={} targetActor={} proj={}",
+				bounceReason, target, lp, projectile.getTargetActor(),
+				System.identityHashCode(projectile));
 			return;
 		}
 
@@ -217,24 +229,19 @@ public class MadAngelVisualsPlugin extends Plugin
 			return;
 		}
 
-		// Dedupe repeated ProjectileMoved for the same projectile+tile only.
-		if (hasPendingFor(projectile, lp))
+		// Dedupe: only one stand tile at a time (ignore projectile identity — refs can churn).
+		if (hasPendingAt(lp))
 		{
 			return;
 		}
 
-		log.info("Bomb projectile target={} local={} remaining={} targetActor={}",
-			target, lp, projectile.getRemainingCycles(), projectile.getTargetActor());
-
-		pendingDestinations.add(new PendingDestination(projectile, target, lp, client.getGameCycle()));
-		logCaptureScan(lp);
-		tryTrackShadowAt(lp);
+		armStandDestination(projectile, target, lp, "projectile");
 	}
 
 	@Subscribe
 	public void onGraphicsObjectCreated(GraphicsObjectCreated event)
 	{
-		if (!config.remapShadow() || pendingDestinations.isEmpty())
+		if (!config.remapShadow())
 		{
 			return;
 		}
@@ -246,17 +253,42 @@ public class MadAngelVisualsPlugin extends Plugin
 			return;
 		}
 
+		logCapture(go);
+
+		// Known bomb shadows are authoritative for the stand tile. Snap the single
+		// pending onto that gfx so adjacent hops still get a full outline even when
+		// ProjectileMoved lagged on the previous tile.
+		if (isShadowSpotanim(go.getId()) && (hasLiveBombProjectile() || !pendingDestinations.isEmpty()))
+		{
+			PendingDestination pending = findPendingFor(lp, go.getLevel());
+			if (pending == null)
+			{
+				Projectile bomb = findLiveBombProjectile();
+				WorldPoint target = bomb != null ? bomb.getTargetPoint() : WorldPoint.fromLocalInstance(client, lp);
+				armStandDestination(bomb, target, lp, "shadow-snap");
+				pending = findPendingFor(lp, go.getLevel());
+			}
+			if (pending != null)
+			{
+				trackShadow(go, pending);
+			}
+			return;
+		}
+
+		if (pendingDestinations.isEmpty())
+		{
+			return;
+		}
+
 		PendingDestination pending = findPendingFor(lp, go.getLevel());
 		if (pending == null)
 		{
 			return;
 		}
 
-		logCapture(go);
-
 		if (shouldTrack(go, pending))
 		{
-			trackShadow(go);
+			trackShadow(go, pending);
 		}
 	}
 
@@ -279,6 +311,11 @@ public class MadAngelVisualsPlugin extends Plugin
 			GraphicsObject go = it.next();
 			if (go.finished())
 			{
+				LocalPoint lp = go.getLocation();
+				log.info("DROP_SHADOW gfx={} scene=({}, {})",
+					go.getId(),
+					lp != null ? lp.getSceneX() : -1,
+					lp != null ? lp.getSceneY() : -1);
 				it.remove();
 				continue;
 			}
@@ -300,11 +337,14 @@ public class MadAngelVisualsPlugin extends Plugin
 		while (pendingIt.hasNext())
 		{
 			PendingDestination pending = pendingIt.next();
-			if (pending.projectile.getRemainingCycles() < 0)
+			if (!hasLiveBombProjectile())
 			{
 				pending.ticksAfterProjectile++;
 				if (pending.ticksAfterProjectile > PENDING_EXTRA_TICKS)
 				{
+					log.info("CLEAR_PENDING count=1 cause=ttl scene=({}, {})",
+						pending.localPoint.getSceneX(),
+						pending.localPoint.getSceneY());
 					pendingIt.remove();
 					continue;
 				}
@@ -358,7 +398,7 @@ public class MadAngelVisualsPlugin extends Plugin
 
 			if (shouldTrack(go, pending))
 			{
-				trackShadow(go);
+				trackShadow(go, pending);
 			}
 		}
 	}
@@ -376,22 +416,45 @@ public class MadAngelVisualsPlugin extends Plugin
 		return age >= 0 && age <= EARLY_LOOM_CYCLES;
 	}
 
-	private void trackShadow(GraphicsObject go)
+	private void trackShadow(GraphicsObject go, PendingDestination pending)
 	{
-		if (!trackedShadows.add(go))
+		boolean added = trackedShadows.add(go);
+		pending.sawShadow = true;
+		markSawShadowOnTile(go.getLocation());
+		lastFootprintRadius = ShadowHull.footprintRadius(go);
+		if (!added)
 		{
 			return;
 		}
-
-		lastFootprintRadius = ShadowHull.footprintRadius(go);
-		log.info("Tracking floor shadow gfx id={} z={} for in-place recolor", go.getId(), go.getZ());
+		LocalPoint lp = go.getLocation();
+		log.info("TRACK gfx={} scene=({}, {}) z={} radius={}",
+			go.getId(),
+			lp != null ? lp.getSceneX() : -1,
+			lp != null ? lp.getSceneY() : -1,
+			go.getZ(),
+			lastFootprintRadius);
 	}
 
-	private boolean hasPendingFor(Projectile projectile, LocalPoint lp)
+	private void markSawShadowOnTile(LocalPoint lp)
+	{
+		if (lp == null)
+		{
+			return;
+		}
+		for (PendingDestination pending : pendingDestinations)
+		{
+			if (sameSceneTile(pending.localPoint, lp))
+			{
+				pending.sawShadow = true;
+			}
+		}
+	}
+
+	private boolean hasPendingAt(LocalPoint lp)
 	{
 		for (PendingDestination pending : pendingDestinations)
 		{
-			if (pending.projectile == projectile && sameSceneTile(pending.localPoint, lp))
+			if (sameSceneTile(pending.localPoint, lp))
 			{
 				return true;
 			}
@@ -399,9 +462,57 @@ public class MadAngelVisualsPlugin extends Plugin
 		return false;
 	}
 
-	private void removePendingsFor(Projectile projectile)
+	/**
+	 * Exactly one stand destination at a time. Clears prior hops so adjacent
+	 * retargets cannot leave dual fallback circles (projectile identity is not
+	 * reliable across hops).
+	 */
+	private void armStandDestination(@Nullable Projectile projectile, @Nullable WorldPoint target,
+		LocalPoint lp, String cause)
 	{
-		pendingDestinations.removeIf(pending -> pending.projectile == projectile);
+		clearAllPendings("retarget-" + cause);
+		pendingDestinations.add(new PendingDestination(projectile, target, lp, client.getGameCycle()));
+		log.info("ARM cause={} target={} scene=({}, {}) remaining={} targetActor={} proj={} pendings={}",
+			cause,
+			target,
+			lp.getSceneX(),
+			lp.getSceneY(),
+			projectile != null ? projectile.getRemainingCycles() : -1,
+			projectile != null ? projectile.getTargetActor() : null,
+			projectile != null ? System.identityHashCode(projectile) : 0,
+			pendingDestinations.size());
+		logCaptureScan(lp);
+		tryTrackShadowAt(lp);
+	}
+
+	private void clearAllPendings(String cause)
+	{
+		int cleared = pendingDestinations.size();
+		if (cleared == 0)
+		{
+			return;
+		}
+		pendingDestinations.clear();
+		log.info("CLEAR_PENDING count={} cause={}", cleared, cause);
+	}
+
+	private boolean hasLiveBombProjectile()
+	{
+		return findLiveBombProjectile() != null;
+	}
+
+	@Nullable
+	private Projectile findLiveBombProjectile()
+	{
+		for (Projectile projectile : client.getProjectiles())
+		{
+			if (projectile.getId() == SpotanimID.VFX_MAD_ANGEL_ATTACK_BOMB_THROW_PROJECTILE
+				&& projectile.getRemainingCycles() >= 0)
+			{
+				return projectile;
+			}
+		}
+		return null;
 	}
 
 	private boolean hasLiveShadowOnTile(LocalPoint lp)
@@ -479,27 +590,47 @@ public class MadAngelVisualsPlugin extends Plugin
 			go.getZ());
 	}
 
-	private boolean isBounceBackToBoss(Projectile projectile, WorldPoint target)
+	/**
+	 * Bounce-back toward the Mad Angel. Only {@code targetActor} counts — footprint
+	 * checks false-positive when the stand tile lies under the multi-tile NPC
+	 * (especially short adjacent hops near the angel).
+	 *
+	 * @return reason string for logging, or null if not a bounce-back
+	 */
+	@Nullable
+	private String bounceBackReason(Projectile projectile)
 	{
 		Actor targetActor = projectile.getTargetActor();
 		if (targetActor instanceof NPC && MadAngelNpcs.isMadAngel((NPC) targetActor))
 		{
-			return true;
+			return "targetActor";
 		}
+		return null;
+	}
 
-		if (target == null)
+	private void logFallbackTransitions(Set<Long> nowActive)
+	{
+		for (Long key : nowActive)
 		{
-			return false;
-		}
-
-		for (NPC npc : madAngels)
-		{
-			if (MadAngelNpcs.isInsideFootprint(npc, target))
+			if (!fallbackActiveKeys.contains(key))
 			{
-				return true;
+				log.info("FALLBACK_ON scene=({}, {})", (int) (key >> 32), key.intValue());
 			}
 		}
-		return false;
+		for (Long key : fallbackActiveKeys)
+		{
+			if (!nowActive.contains(key))
+			{
+				log.info("FALLBACK_OFF scene=({}, {})", (int) (key >> 32), key.intValue());
+			}
+		}
+		fallbackActiveKeys.clear();
+		fallbackActiveKeys.addAll(nowActive);
+	}
+
+	private static long sceneKey(LocalPoint lp)
+	{
+		return (((long) lp.getSceneX()) << 32) | (lp.getSceneY() & 0xffffffffL);
 	}
 
 	private void scanMadAngels()
@@ -520,6 +651,7 @@ public class MadAngelVisualsPlugin extends Plugin
 		pendingDestinations.clear();
 		madAngels.clear();
 		loggedCaptureIds.clear();
+		fallbackActiveKeys.clear();
 		lastFootprintRadius = ShadowHull.DEFAULT_FALLBACK_RADIUS;
 	}
 
@@ -569,13 +701,18 @@ public class MadAngelVisualsPlugin extends Plugin
 
 	private static final class PendingDestination
 	{
+		@Nullable
 		private final Projectile projectile;
+		@Nullable
 		private final WorldPoint target;
 		private final LocalPoint localPoint;
 		private final int startCycle;
 		private int ticksAfterProjectile;
+		/** True once a live shadow gfx was tracked for this stand hop. */
+		private boolean sawShadow;
 
-		private PendingDestination(Projectile projectile, WorldPoint target, LocalPoint localPoint, int startCycle)
+		private PendingDestination(@Nullable Projectile projectile, @Nullable WorldPoint target,
+			LocalPoint localPoint, int startCycle)
 		{
 			this.projectile = projectile;
 			this.target = target;
