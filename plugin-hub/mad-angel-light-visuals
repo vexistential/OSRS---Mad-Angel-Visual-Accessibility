@@ -1,2 +1,2 @@
 repository=https://github.com/REPLACE_ME/mad-angel-light-visuals.git
-commit=9cfe88239932d8a5cc1b85a4058e1315967d5eed
+commit=USE_git_rev-parse_HEAD_AFTER_PUSH
