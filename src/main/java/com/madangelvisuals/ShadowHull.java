@@ -11,9 +11,11 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.model.Jarvis;
 
 /**
- * Projects a GraphicsObject's model vertices to canvas and builds a convex hull.
- * Used instead of {@code ModelOutlineRenderer}, which often draws nothing for flat
- * floor shadows (face culling / software-buffer outlining).
+ * Projects a GraphicsObject's model vertices to canvas and builds a convex hull
+ * that follows the mesh silhouette (circular shadows stay round-ish).
+ * <p>
+ * Do not use {@link Perspective#getClickbox} here — it often returns an AABB,
+ * which looks square on floor shadows.
  */
 final class ShadowHull
 {
@@ -42,15 +44,6 @@ final class ShadowHull
 			wv = client.getTopLevelWorldView();
 		}
 
-		int z = graphicsObject.getZ() - graphicsObject.getAnimationHeightOffset();
-
-		// Prefer the engine clickbox when available — follows the rendered mesh.
-		Shape clickbox = Perspective.getClickbox(client, wv, model, 0, lp.getX(), lp.getY(), z);
-		if (clickbox != null)
-		{
-			return clickbox;
-		}
-
 		int vertexCount = model.getVerticesCount();
 		if (vertexCount < 3)
 		{
@@ -65,6 +58,7 @@ final class ShadowHull
 			return null;
 		}
 
+		int z = graphicsObject.getZ() - graphicsObject.getAnimationHeightOffset();
 		int[] x2d = new int[vertexCount];
 		int[] y2d = new int[vertexCount];
 		Perspective.modelToCanvas(client, wv, vertexCount, lp.getX(), lp.getY(), z, 0, vx, vy, vz, x2d, y2d);

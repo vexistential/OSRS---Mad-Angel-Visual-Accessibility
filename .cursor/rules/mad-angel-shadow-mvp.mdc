@@ -1,0 +1,23 @@
+---
+description: Mad Angel Exploding Light shadow highlight — viable MVP baseline
+alwaysApply: true
+---
+
+# Mad Angel shadow highlight — MVP baseline
+
+The following approach is a **viable MVP**. Further work is refinement only; do not revert to full-tile fills, `ModelOutlineRenderer`, clickbox AABB outlines, or shared-`getModel()` `RuneLiteObject` clones.
+
+## What works
+
+1. Detect bomb projectile `4015` via `ProjectileMoved`; use event `LocalPoint` (instance-safe).
+2. Skip bounce-back to Mad Angel (`targetActor` / footprint).
+3. Track destination `GraphicsObject`s (pinned bomb spotanims + early-window loom candidates).
+4. In-place `BeforeRender` face recolor (`ShadowRecolor`: untexture, opaque, max HSL).
+5. Outline the **shadow mesh** with canvas vertex projection + `Jarvis.convexHull` (`ShadowHull`), stroked with a bright border and **no fill** (`ShadowBorderOverlay`).
+
+## Do not
+
+- Full-tile `Perspective.getCanvasTilePoly` as the primary highlight
+- `ModelOutlineRenderer` for these flat floor shadows (often invisible)
+- Prefer `Perspective.getClickbox` for the outline (AABB → square-ish)
+- Assign `GraphicsObject.getModel()` to a `RuneLiteObject` (shared buffer → actor ghosts)

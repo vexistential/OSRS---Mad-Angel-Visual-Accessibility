@@ -13,16 +13,13 @@ import net.runelite.api.GraphicsObject;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
-import net.runelite.client.ui.overlay.OverlayUtil;
 
 /**
- * Draws a vibrant hull/outline around the tracked shadow GraphicsObject mesh
- * (not the whole tile). Uses canvas projection rather than ModelOutlineRenderer,
- * which fails to visibly outline flat floor shadows.
+ * Bright stroke-only outline around the tracked shadow mesh silhouette.
+ * No fill — fill made the highlight look like a tile blotch.
  */
 class ShadowBorderOverlay extends Overlay
 {
-	private static final int FILL_ALPHA = 70;
 	private static final float BORDER_WIDTH = 4f;
 
 	private final Client client;
@@ -56,18 +53,22 @@ class ShadowBorderOverlay extends Overlay
 
 		Color style = config.style().getShadowColor();
 		Color border = new Color(style.getRed(), style.getGreen(), style.getBlue(), 255);
-		Color fill = new Color(style.getRed(), style.getGreen(), style.getBlue(), FILL_ALPHA);
-		Stroke stroke = new BasicStroke(BORDER_WIDTH);
+		Stroke stroke = new BasicStroke(BORDER_WIDTH, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+
+		Stroke previous = graphics.getStroke();
+		graphics.setStroke(stroke);
+		graphics.setColor(border);
 
 		for (GraphicsObject shadow : shadows)
 		{
 			Shape hull = ShadowHull.of(client, shadow);
 			if (hull != null)
 			{
-				OverlayUtil.renderPolygon(graphics, hull, border, fill, stroke);
+				graphics.draw(hull);
 			}
 		}
 
+		graphics.setStroke(previous);
 		return null;
 	}
 }

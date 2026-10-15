@@ -11,11 +11,11 @@
 
 `GraphicsObject.getModel()` returns a **shared temporary model buffer**. Assigning it to a `RuneLiteObject` made other actors (player, boss, random NPCs) appear on the shadow tile. In-place mutation for the same frame’s draw avoids that.
 
-## Why not ModelOutlineRenderer / tile poly?
+## MVP outline path (viable — refine, don’t replace)
 
-- Full-tile `getCanvasTilePoly` highlights the square, not the shadow mesh.
-- `ModelOutlineRenderer.drawOutline(GraphicsObject)` often draws nothing visible for flat floor shadows (face culling / software raster path).
-- Spec path: project the shadow model to canvas (`getClickbox` or `modelToCanvas` + `Jarvis.convexHull`) and stroke that hull.
+- Project shadow model vertices with `modelToCanvas`, then `Jarvis.convexHull`, stroke only (no fill).
+- Do **not** use `getClickbox` for the outline (AABB → square-ish).
+- Do **not** use full-tile `getCanvasTilePoly` or `ModelOutlineRenderer` for these flat floor shadows.
 
 ## Pinned shadow candidates
 
