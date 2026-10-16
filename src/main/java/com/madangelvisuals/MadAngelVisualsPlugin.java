@@ -39,8 +39,8 @@ import net.runelite.client.ui.overlay.OverlayManager;
  */
 @Slf4j
 @PluginDescriptor(
-	name = "Mad Angel Light Visuals",
-	description = "Recolors Mad Angel Exploding Light floor shadows for accessibility",
+	name = "Mad Angel Visual Accessibility",
+	description = "Improves visibility of Mad Angel Exploding Light floor shadows",
 	tags = {"mad angel", "wyrmscraig", "pvm", "accessibility", "visuals"}
 )
 public class MadAngelVisualsPlugin extends Plugin
@@ -87,7 +87,7 @@ public class MadAngelVisualsPlugin extends Plugin
 	protected void startUp()
 	{
 		overlayManager.add(shadowBorderOverlay);
-		log.debug("Mad Angel Light Visuals started");
+		log.debug("Mad Angel Visual Accessibility started");
 	}
 
 	@Override
@@ -95,7 +95,7 @@ public class MadAngelVisualsPlugin extends Plugin
 	{
 		overlayManager.remove(shadowBorderOverlay);
 		clearState();
-		log.debug("Mad Angel Light Visuals stopped");
+		log.debug("Mad Angel Visual Accessibility stopped");
 	}
 
 	/**

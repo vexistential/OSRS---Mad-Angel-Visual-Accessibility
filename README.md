@@ -1,6 +1,6 @@
-# Mad Angel Light Visuals
+# Mad Angel Visual Accessibility
 
-Makes the Mad Angel (Wyrmscraig) **Exploding Light** floor shadow easier to see.
+Improves visibility of the Mad Angel (Wyrmscraig) **Exploding Light** floor shadow.
 
 When the attack targets a player-stand destination, this plugin recolors the
 existing floor shadow and draws a high-contrast outline around the shadow's

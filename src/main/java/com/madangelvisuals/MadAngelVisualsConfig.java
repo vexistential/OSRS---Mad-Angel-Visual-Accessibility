@@ -7,7 +7,7 @@ import net.runelite.client.config.ConfigItem;
 @ConfigGroup(MadAngelVisualsConfig.GROUP)
 public interface MadAngelVisualsConfig extends Config
 {
-	String GROUP = "mad-angel-light-visuals";
+	String GROUP = "mad-angel-visual-accessibility";
 
 	@ConfigItem(
 		keyName = "remapShadow",
